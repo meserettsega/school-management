@@ -230,7 +230,7 @@ Detailed project documentation is maintained separately to keep the main README 
 | ------------------------------------ | ------------------------------------------ |
 | **[QUICK_START.md](QUICK_START.md)** | Get the application running quickly        |
 | **[SETUP.md](SETUP.md)**             | Detailed development and environment setup |
-| **[WALKTHROUGH.md](WALKTHROUGH.md)** | Application flow and feature walkthrough   |
+| **[WALKTHROUGH.md](walkthrough.md)** | Application flow and feature walkthrough   |
 
 Start here if you are new to the project:
 
