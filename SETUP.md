@@ -105,7 +105,7 @@ PORT=5000
 NODE_ENV=development
 
 # MongoDB
-MONGODB_URI=mongodb://localhost:27017/school_management
+MONGODB_URI=mongodb://localhost:217/school
 # OR use MongoDB Atlas:
 # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/school_management
 
@@ -121,11 +121,11 @@ CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 
 # Frontend URL
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5123
 
 # Email (Optional - for notifications)
 EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
+EMAIL_PORT=788
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASSWORD=your_app_password
 ```
