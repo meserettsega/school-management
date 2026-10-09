@@ -5,6 +5,7 @@ const Teacher = require('../models/Teacher');
 const mongoose = require('mongoose');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
+const { findSchoolByCode, normalizeSchoolCode } = require('../utils/schoolCode');
 
 // Password Validation Helper: 6+ chars, 1 capital, 1 number, 1 special character
 const validatePasswordStrength = (password) => {
@@ -74,7 +75,7 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: 'School name and school code are required for admin registration' });
       }
 
-      school = await School.findOne({ code: schoolCode });
+      school = await findSchoolByCode(schoolCode);
       if (school) {
         return res.status(400).json({ message: 'School with this code already exists' });
       }
@@ -83,7 +84,7 @@ exports.register = async (req, res) => {
         return res.status(400).json({ message: 'School code is required for teacher and student registration' });
       }
 
-      school = await School.findOne({ code: schoolCode });
+      school = await findSchoolByCode(schoolCode);
       if (!school) {
         return res.status(404).json({ message: 'School not found' });
       }
@@ -149,7 +150,7 @@ exports.register = async (req, res) => {
       school = await School.create({
         _id: schoolIdObject,
         name: schoolName,
-        code: schoolCode,
+        code: normalizeSchoolCode(schoolCode),
         adminId,
         email,
         phone,
@@ -196,7 +197,7 @@ exports.login = async (req, res) => {
     }
 
     // Find school by code
-    const school = await School.findOne({ code: schoolCode });
+    const school = await findSchoolByCode(schoolCode);
     if (!school) {
       return res.status(404).json({ message: 'School does not exist' });
     }
