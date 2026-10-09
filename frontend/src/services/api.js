@@ -114,6 +114,7 @@ export const eventService = {
 
 // Message Services
 export const messageService = {
+  getContacts: () => apiClient.get('/messages/contacts'),
   send: (data) => apiClient.post('/messages', data),
   getInbox: (params) => apiClient.get('/messages/inbox', { params }),
   getSent: (params) => apiClient.get('/messages/sent', { params }),

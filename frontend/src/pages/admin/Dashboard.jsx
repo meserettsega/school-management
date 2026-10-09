@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ArrowRight, BarChart3, Bell, BookOpen, GraduationCap, Users, Search, 
-  Mail, Phone, Calendar, Shield, DollarSign, Award, MapPin, Plus, 
+  Mail, Phone, Calendar, Shield, DollarSign, Award, MapPin, Plus, MessageSquare,
   Trash2, X, ClipboardList, BookOpenCheck, CheckCircle, Edit, Pencil, Settings, Menu 
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import apiClient from '../../utils/apiClient';
+import MessagingPanel from '../../components/MessagingPanel';
+import MessageNotifications from '../../components/MessageNotifications';
+import NationalExamManager from '../../components/NationalExamManager';
 
 const AdminDashboard = () => {
   const getTabFromHash = () => {
     const hash = window.location.hash.replace('#/', '');
-    const validTabs = ['overview', 'teachers', 'students', 'classes', 'subjects', 'exams', 'notices', 'grievances', 'fees', 'teacherAssignments', 'timetable'];
+    const validTabs = ['overview', 'teachers', 'students', 'families', 'classes', 'subjects', 'exams', 'national-exams', 'notices', 'grievances', 'fees', 'teacherAssignments', 'timetable', 'messages'];
     if (hash && validTabs.includes(hash)) {
       return hash;
     }
@@ -54,8 +57,10 @@ const AdminDashboard = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTab]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [messageTarget, setMessageTarget] = useState({ id: '', request: 0 });
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [families, setFamilies] = useState([]);
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [exams, setExams] = useState([]);
@@ -139,6 +144,7 @@ const AdminDashboard = () => {
   const [showAddTeacherModal, setShowAddTeacherModal] = useState(false);
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [editingFamilyId, setEditingFamilyId] = useState(null);
   const [expandedStds, setExpandedStds] = useState(new Set());
   const [showAssignSubjectsModal, setShowAssignSubjectsModal] = useState(false);
   const [assignSubjectsTeacher, setAssignSubjectsTeacher] = useState(null); // the teacher object
@@ -164,6 +170,14 @@ const AdminDashboard = () => {
   const [selectedDivision, setSelectedDivision] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [selectedManageClassStd, setSelectedManageClassStd] = useState(null);
+
+  const openMessages = (contactId = '') => {
+    if (contactId) {
+      setMessageTarget(previous => ({ id: contactId, request: previous.request + 1 }));
+    }
+    setActiveTab('messages');
+    setIsSidebarOpen(false);
+  };
 
   const [showClassSetupModal, setShowClassSetupModal] = useState(false);
   const [totalNumericStandards, setTotalNumericStandards] = useState(10);
@@ -262,10 +276,10 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       await apiClient.delete(`/classes/${classId}`);
-      toast.success('Division deleted and students distributed to other divisions successfully!');
+      toast.success('Section deleted and students distributed to other sections successfully!');
       await fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete division');
+      toast.error(error.response?.data?.message || 'Failed to delete section');
     } finally {
       setLoading(false);
     }
@@ -275,10 +289,10 @@ const AdminDashboard = () => {
     setLoading(true);
     try {
       await apiClient.delete(`/classes/standard/${stdName}`);
-      toast.success(`Standard "${stdName}" and its divisions deleted successfully!`);
+      toast.success(`Grade "${stdName}" and its sections deleted successfully!`);
       await fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to delete standard');
+      toast.error(error.response?.data?.message || 'Failed to delete grade');
     } finally {
       setLoading(false);
     }
@@ -302,10 +316,10 @@ const AdminDashboard = () => {
         standard: stdName,
         division: nextLetter
       });
-      toast.success(`Division "${nextLetter}" added successfully to Standard "${stdName}"!`);
+      toast.success(`Section "${nextLetter}" added successfully to Grade "${stdName}"!`);
       await fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to add division');
+      toast.error(error.response?.data?.message || 'Failed to add section');
     } finally {
       setLoading(false);
     }
@@ -501,6 +515,15 @@ const AdminDashboard = () => {
     docCasteCertificate: '',
   });
 
+  const [familyForm, setFamilyForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    phone: '',
+    relationshipToStudent: 'Parent',
+    notes: '',
+    children: [],
+  });
   const [studentModalTab, setStudentModalTab] = useState('basic');
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState(null);
   const [showStudentDetailsModal, setShowStudentDetailsModal] = useState(false);
@@ -606,6 +629,9 @@ const AdminDashboard = () => {
 
       const resStudents = await apiClient.get('/students?limit=1000');
       setStudents(resStudents.data.students || []);
+
+      const resFamilies = await apiClient.get('/families?limit=1000').catch(() => ({ data: { families: [] } }));
+      setFamilies(resFamilies.data.families || []);
 
       const resProfile = await apiClient.get('/auth/profile').catch(() => null);
       if (resProfile?.data?.user) {
@@ -751,7 +777,7 @@ const AdminDashboard = () => {
 
   const handleOpenAddTeacher = () => {
     if (classes.length === 0) {
-      toast.error('student and teacher cannot be added unless and until the std and division are not set');
+      toast.error('Set up grades and sections before adding students or teachers.');
       return;
     }
     setEditingTeacherId(null);
@@ -845,7 +871,7 @@ const AdminDashboard = () => {
 
   const handleOpenAddStudent = () => {
     if (classes.length === 0) {
-      toast.error('student and teacher cannot be added unless and until the std and division are not set');
+      toast.error('Set up grades and sections before adding students or teachers.');
       return;
     }
     setEditingStudentId(null);
@@ -1123,6 +1149,78 @@ const AdminDashboard = () => {
     }
   };
 
+  const resetFamilyForm = () => {
+    setEditingFamilyId(null);
+    setFamilyForm({
+      name: '',
+      email: '',
+      password: '',
+      phone: '',
+      relationshipToStudent: 'Parent',
+      notes: '',
+      children: [],
+    });
+  };
+
+  const handleOpenEditFamily = (familyRecord) => {
+    setEditingFamilyId(familyRecord._id);
+    setFamilyForm({
+      name: familyRecord.name || '',
+      email: familyRecord.email || '',
+      password: '',
+      phone: familyRecord.phone || '',
+      relationshipToStudent: familyRecord.relationshipToStudent || 'Parent',
+      notes: familyRecord.notes || '',
+      children: (familyRecord.children || []).map(child => child.studentId?._id || child.studentId),
+    });
+  };
+
+  const handleFamilySubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...familyForm,
+        children: familyForm.children.map(studentId => ({
+          studentId,
+          relation: familyForm.relationshipToStudent,
+        })),
+      };
+
+      const pwd = familyForm.password || '';
+      if (!editingFamilyId || pwd) {
+        const isValid = pwd.length >= 6 && /[A-Z]/.test(pwd) && /[0-9]/.test(pwd) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(pwd);
+        if (!isValid) {
+          toast.error('Password must be at least 6 characters, contain 1 capital letter, 1 number, and 1 special character');
+          return;
+        }
+      }
+
+      if (editingFamilyId) {
+        await apiClient.put(`/families/${editingFamilyId}`, payload);
+        toast.success('Family updated successfully!');
+      } else {
+        await apiClient.post('/families', payload);
+        toast.success('Family created successfully!');
+      }
+
+      resetFamilyForm();
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to save family');
+    }
+  };
+
+  const handleDeleteFamily = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this family?')) return;
+    try {
+      await apiClient.delete(`/families/${id}`);
+      toast.success('Family deleted successfully!');
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete family');
+    }
+  };
+
   const handleNoticeSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -1187,7 +1285,7 @@ const AdminDashboard = () => {
   const handleSubjectSubmit = async (e) => {
     e.preventDefault();
     if (!subjectForm.standards || subjectForm.standards.length === 0) {
-      toast.error('Please assign this subject to at least one standard!');
+      toast.error('Please assign this subject to at least one grade!');
       return;
     }
     try {
@@ -1253,7 +1351,7 @@ const AdminDashboard = () => {
   const handleExamSubmit = async (e) => {
     e.preventDefault();
     if (!examForm.standards || examForm.standards.length === 0) {
-      toast.error('Please select at least one standard!');
+      toast.error('Please select at least one grade!');
       return;
     }
     try {
@@ -1287,7 +1385,7 @@ const AdminDashboard = () => {
             passingMarks: Number(examForm.passingMarks)
           });
         }
-        toast.success(`Exam created successfully for ${targetClasses.length} division(s)!`);
+        toast.success(`Exam created successfully for ${targetClasses.length} section(s)!`);
       }
       setShowAddExamModal(false);
       setEditingExamId(null);
@@ -1329,7 +1427,7 @@ const AdminDashboard = () => {
   const handleFeeSubmit = async (e) => {
     e.preventDefault();
     if (!feeForm.standard) {
-      toast.error("Please select a standard!");
+      toast.error('Please select a grade!');
       return;
     }
     if (!feeForm.totalAmount || Number(feeForm.totalAmount) <= 0) {
@@ -1392,6 +1490,26 @@ const AdminDashboard = () => {
       passingMarks: ex.passingMarks || 35
     });
     setShowAddExamModal(true);
+  };
+
+  const getTeacherReferenceId = (reference) => String(reference?._id || reference || '');
+
+  const teacherHasSubjectForStandard = (teacher, subjectId, standard) => {
+    const subjectKey = String(subjectId);
+    const standardKey = String(standard).trim();
+    const hasConfiguredAssignment = teacher.assignedSubjectStandards?.some(assignment =>
+      getTeacherReferenceId(assignment.subjectId) === subjectKey &&
+      assignment.standards?.some(assignedStandard => String(assignedStandard).trim() === standardKey)
+    );
+    const hasDivisionAssignment = teacher.subjectClassAssignments?.some(assignment =>
+      getTeacherReferenceId(assignment.subjectId) === subjectKey &&
+      String(assignment.classId?.standard || '').trim() === standardKey
+    );
+    const hasSubjectAndClassIds =
+      teacher.subjectIds?.some(subject => getTeacherReferenceId(subject) === subjectKey) &&
+      teacher.classIds?.some(classItem => String(classItem?.standard || '').trim() === standardKey);
+
+    return hasConfiguredAssignment || hasDivisionAssignment || hasSubjectAndClassIds;
   };
 
   const filteredTeachers = teachers.filter(t => {
@@ -1461,7 +1579,8 @@ const AdminDashboard = () => {
                  {[
                   { id: 'overview', label: 'Overview', icon: BarChart3 },
                   { id: 'teachers', label: 'Teachers List', icon: Users },
-                  { id: 'students', label: 'Students List', icon: GraduationCap }
+                  { id: 'students', label: 'Students List', icon: GraduationCap },
+                  { id: 'families', label: 'Families List', icon: Users }
                 ].map(item => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
@@ -1492,11 +1611,13 @@ const AdminDashboard = () => {
                   { id: 'classes', label: 'Manage Classes', icon: GraduationCap },
                   { id: 'subjects', label: 'Manage Subjects', icon: BookOpen },
                   { id: 'exams', label: 'Manage Exams', icon: ClipboardList },
+                  { id: 'national-exams', label: 'National Exam Practice', icon: BookOpenCheck },
                   { id: 'notices', label: 'Manage Notice', icon: Bell },
                   { id: 'grievances', label: 'Manage Grievance', icon: Shield },
                   { id: 'fees', label: 'Manage Fees', icon: DollarSign },
                   { id: 'teacherAssignments', label: 'Teacher Assignments', icon: BookOpenCheck },
-                  { id: 'timetable', label: 'Manage Timetable', icon: Calendar }
+                  { id: 'timetable', label: 'Manage Timetable', icon: Calendar },
+                  { id: 'messages', label: 'Messages', icon: MessageSquare }
                 ].map(item => {
                   const Icon = item.icon;
                   const active = activeTab === item.id;
@@ -1585,6 +1706,10 @@ const AdminDashboard = () => {
             <div className="flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
               <h1 className="text-sm md:text-base font-black tracking-tight uppercase">WELCOME ADMIN of "{schoolName || 'Your School'}"</h1>
             </div>
+            <MessageNotifications
+              onOpenMessages={() => openMessages()}
+              onOpenConversation={openMessages}
+            />
           </div>
 
         {loading ? (
@@ -1602,11 +1727,11 @@ const AdminDashboard = () => {
                     { icon: GraduationCap, title: 'Total Teachers', value: teachers.length, tone: 'bg-emerald-500/10 text-emerald-700' },
                     {
                       icon: BookOpen,
-                      title: 'Total Standards & Divisions',
+                      title: 'Total Grades & Sections',
                       value: (() => {
                         const totalStds = classes ? [...new Set(classes.map(c => c.standard))].length : 0;
                         const totalDivs = classes ? classes.length : 0;
-                        return `${totalStds} Stds / ${totalDivs} Divs`;
+                        return `${totalStds} Grades / ${totalDivs} Sections`;
                       })(),
                       tone: 'bg-amber-500/10 text-amber-700'
                     },
@@ -1658,7 +1783,7 @@ const AdminDashboard = () => {
                   return (
                     <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
                       <h2 className="text-xl font-bold text-[#3f2a1d] mb-1">Fee Collection</h2>
-                      <p className="text-sm text-[#7f634e] mb-5">Overall collection progress across all standards.</p>
+                      <p className="text-sm text-[#7f634e] mb-5">Overall collection progress across all grades.</p>
                       <div className="flex flex-col sm:flex-row items-center gap-8">
                         {/* Circular SVG */}
                         <div className="relative shrink-0">
@@ -1717,7 +1842,7 @@ const AdminDashboard = () => {
 
                 <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm space-y-4">
                     <h2 className="text-xl font-bold text-[#3f2a1d]">Upcoming Exams</h2>
-                    <p className="text-sm text-[#7f634e]">Assessments grouped by exam name and date across all standards.</p>
+                    <p className="text-sm text-[#7f634e]">Assessments grouped by exam name and date across all grades.</p>
                     
                     <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                       {(() => {
@@ -1753,7 +1878,7 @@ const AdminDashboard = () => {
                             <div>
                               <p className="font-bold text-[#3f2a1d]">{group.name}</p>
                               <p className="text-[10px] text-[#8a6a50] mt-1">
-                                Std: {group.standards.length > 0
+                                Grade: {group.standards.length > 0
                                   ? group.standards.map(s => s.match(/^\d+$/) ? s : s).join(', ')
                                   : 'N/A'}
                               </p>
@@ -1769,14 +1894,36 @@ const AdminDashboard = () => {
                 </div>
             )}
 
+            {activeTab === 'messages' && (
+              <MessagingPanel
+                messageTarget={messageTarget}
+                contacts={[
+                  ...teachers.map(teacher => ({
+                    id: teacher._id,
+                    name: teacher.name,
+                    email: teacher.email,
+                    role: 'Teacher',
+                  })),
+                  ...families.map(family => ({
+                    id: family._id,
+                    name: family.name,
+                    email: family.email,
+                    role: 'Family',
+                  })),
+                ]}
+              />
+            )}
+
+            {activeTab === 'national-exams' && <NationalExamManager />}
+
             {/* TEACHERS TAB */}
             {activeTab === 'teachers' && (
               <div className="space-y-6">
                 {/* Header row */}
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <h2 className="text-2xl font-black text-[#3f2a1d]">👩‍🏫 Teachers by Standard</h2>
-                    <p className="text-xs text-[#8a6a50] mt-1">Subjects assigned per standard, with teachers linked to each subject.</p>
+                    <h2 className="text-2xl font-black text-[#3f2a1d]">👩‍🏫 Teachers by Grade</h2>
+                    <p className="text-xs text-[#8a6a50] mt-1">Subjects assigned per grade, with teachers linked to each subject.</p>
                   </div>
                   <button
                     onClick={() => { setShowAddTeacherModal(true); resetTeacherForm(); }}
@@ -1797,7 +1944,7 @@ const AdminDashboard = () => {
                     return (
                       <div className="text-center py-20 text-[#8a6a50]">
                         <Users className="h-14 w-14 mx-auto mb-4 opacity-25" />
-                        <p className="font-bold text-base">No standards or subjects configured yet.</p>
+                        <p className="font-bold text-base">No grades or subjects configured yet.</p>
                       </div>
                     );
                   }
@@ -1819,11 +1966,12 @@ const AdminDashboard = () => {
                           });
 
                           // Count total teachers assigned across all subjects in this standard
-                          const allSubjectIds = stdSubjects.map(s => s._id);
                           const totalTeachers = new Set(
                             teachers
-                              .filter(t => t.assignedSubjects?.some(sid => allSubjectIds.includes(sid?._id || sid)))
-                              .map(t => t._id)
+                              .filter(teacher => stdSubjects.some(subject =>
+                                teacherHasSubjectForStandard(teacher, subject._id, std)
+                              ))
+                              .map(teacher => getTeacherReferenceId(teacher._id))
                           ).size;
 
                           return (
@@ -1842,7 +1990,7 @@ const AdminDashboard = () => {
                                 {/* Title + subtitle */}
                                 <div className="flex-1 min-w-0">
                                   <h3 className="text-base font-black text-[#3f2a1d]">
-                                    {std.match(/^\d+$/) ? `Standard ${std}` : std}
+                                    {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                   </h3>
                                   <div className="flex gap-3 mt-0.5 flex-wrap">
                                     <span className="text-[10px] font-bold text-[#8a6a50]">
@@ -1867,13 +2015,11 @@ const AdminDashboard = () => {
                               {isOpen && (
                                 <div className="border-t border-[#d9c5b0] p-5 space-y-4 bg-white/50">
                                   {stdSubjects.length === 0 ? (
-                                    <p className="text-xs text-[#8a6a50] italic text-center py-4">No subjects assigned to this standard yet.</p>
+                                    <p className="text-xs text-[#8a6a50] italic text-center py-4">No subjects assigned to this grade yet.</p>
                                   ) : (
                                     stdSubjects.map(sub => {
-                                      const subTeachers = teachers.filter(t =>
-                                        t.assignedSubjects && t.assignedSubjects.some(sid =>
-                                          (sid?._id || sid) === sub._id
-                                        )
+                                      const subTeachers = teachers.filter(teacher =>
+                                        teacherHasSubjectForStandard(teacher, sub._id, std)
                                       );
                                       return (
                                         <div key={sub._id} className="rounded-2xl border border-[#d9c5b0]/70 bg-white p-4 space-y-3">
@@ -1922,16 +2068,26 @@ const AdminDashboard = () => {
 
                                   {/* Unassigned teachers */}
                                   {(() => {
-                                    const allSubjectIds = stdSubjects.map(s => s._id);
                                     const assignedTeacherIds = new Set(
-                                      teachers.filter(t =>
-                                        t.assignedSubjects?.some(sid => allSubjectIds.includes(sid?._id || sid))
-                                      ).map(t => t._id)
+                                      teachers
+                                        .filter(teacher => stdSubjects.some(subject =>
+                                          teacherHasSubjectForStandard(teacher, subject._id, std)
+                                        ))
+                                        .map(teacher => getTeacherReferenceId(teacher._id))
                                     );
-                                    const stdClassIds = classes.filter(c => c.standard === std).map(c => c._id);
+                                    const stdClassIds = new Set(
+                                      classes.filter(classItem => classItem.standard === std)
+                                        .map(classItem => getTeacherReferenceId(classItem._id))
+                                    );
                                     const unassigned = teachers.filter(t =>
-                                      !assignedTeacherIds.has(t._id) &&
-                                      t.assignedClasses?.some(cid => stdClassIds.includes(cid?._id || cid))
+                                      !assignedTeacherIds.has(getTeacherReferenceId(t._id)) &&
+                                      (
+                                        t.classIds?.some(classItem =>
+                                          String(classItem?.standard || '').trim() === String(std).trim() ||
+                                          stdClassIds.has(getTeacherReferenceId(classItem))
+                                        ) ||
+                                        stdClassIds.has(getTeacherReferenceId(t.classTeacherOf))
+                                      )
                                     );
                                     if (unassigned.length === 0) return null;
                                     return (
@@ -1978,14 +2134,14 @@ const AdminDashboard = () => {
                 {!selectedStandard ? (
                   <div className="space-y-6">
                     <div className="bg-[#fffaf3] border border-[#d9c5b0] rounded-3xl p-6 shadow-sm">
-                      <h3 className="text-lg font-bold text-[#3f2a1d] mb-1">Standard-Wise Student Records</h3>
-                      <p className="text-sm text-[#8a6a50]">Select a standard and division card below to view its enrolled students.</p>
+                      <h3 className="text-lg font-bold text-[#3f2a1d] mb-1">Grade-Wise Student Records</h3>
+                      <p className="text-sm text-[#8a6a50]">Select a grade and section card below to view its enrolled students.</p>
                     </div>
 
                     {classes.length === 0 ? (
                       <div className="text-center py-12 rounded-3xl border border-dashed border-[#d9c5b0] bg-[#fffaf3]">
-                        <p className="text-[#8a6a50] font-semibold">No classes or standards configured yet.</p>
-                        <p className="text-xs text-[#b68c67] mt-1">Click the "Class Setup" button above to configure your school standards.</p>
+                        <p className="text-[#8a6a50] font-semibold">No classes or grades configured yet.</p>
+                        <p className="text-xs text-[#b68c67] mt-1">Click the "Class Setup" button above to configure your school grades.</p>
                       </div>
                     ) : (
                       <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -1995,10 +2151,10 @@ const AdminDashboard = () => {
                             <div key={std} className="rounded-3xl border border-[#d9c5b0] bg-[#fffaf3] p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4">
                               <div>
                                 <h4 className="text-2xl font-black text-[#7a4e2d]">{std}</h4>
-                                <p className="text-xs text-[#8a6a50] mt-1 font-medium">{divisions.length} Division(s) available</p>
+                                <p className="text-xs text-[#8a6a50] mt-1 font-medium">{divisions.length} section(s) available</p>
                               </div>
                               <div className="pt-2 border-t border-[#f4ecdf]">
-                                <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-[#b68c67] mb-2">Divisions</p>
+                                <p className="text-[10px] uppercase tracking-[0.1em] font-semibold text-[#b68c67] mb-2">Sections</p>
                                 <div className="flex flex-wrap gap-2">
                                   {divisions.map((div) => {
                                     const classObj = classes.find(c => c.standard === std && c.division === div);
@@ -2041,7 +2197,7 @@ const AdminDashboard = () => {
                         </button>
                         <div>
                           <h3 className="text-lg font-bold text-[#3f2a1d]">
-                            Standard {selectedStandard} &mdash; Division {selectedDivision}
+                            Grade {selectedStandard} &mdash; Section {selectedDivision}
                           </h3>
                           <p className="text-xs text-[#8a6a50]">Sorted by last name in ascending order</p>
                         </div>
@@ -2101,7 +2257,7 @@ const AdminDashboard = () => {
                               </div>
                               <div className="flex items-center gap-2 text-[#6d4c35]">
                                 <BookOpen className="h-4 w-4 text-[#b68c67]" />
-                                <span>Class: {student.classId?.standard || 'N/A'} ({student.division || 'N/A'})</span>
+                                <span>Grade: {student.classId?.standard || 'N/A'} | Section: {student.division || 'N/A'}</span>
                               </div>
                             </div>
 
@@ -2130,14 +2286,152 @@ const AdminDashboard = () => {
               </div>
             )}
 
+            {/* FAMILIES TAB */}
+            {activeTab === 'families' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-2xl font-black text-[#3f2a1d]">👨‍👩‍👧‍👦 Family Records</h2>
+                    <p className="text-xs text-[#8a6a50] mt-1">Admin-managed family profiles linked to one or more students.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetFamilyForm}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#7a4e2d] text-[#f7efe4] text-xs font-bold hover:bg-[#624021] transition shadow-sm"
+                  >
+                    <Plus className="h-4 w-4" /> Add Family
+                  </button>
+                </div>
+
+                <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-black text-[#3f2a1d]">{editingFamilyId ? 'Edit family profile' : 'Create family profile'}</h3>
+                    </div>
+
+                    <form onSubmit={handleFamilySubmit} className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Full name</label>
+                          <input value={familyForm.name} onChange={(e) => setFamilyForm(prev => ({ ...prev, name: e.target.value }))} className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]" required />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Email</label>
+                          <input type="email" value={familyForm.email} onChange={(e) => setFamilyForm(prev => ({ ...prev, email: e.target.value }))} className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]" required />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Phone</label>
+                          <input value={familyForm.phone} onChange={(e) => setFamilyForm(prev => ({ ...prev, phone: e.target.value }))} className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Relationship</label>
+                          <select value={familyForm.relationshipToStudent} onChange={(e) => setFamilyForm(prev => ({ ...prev, relationshipToStudent: e.target.value }))} className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]">
+                            <option value="Parent">Parent</option>
+                            <option value="Mother">Mother</option>
+                            <option value="Father">Father</option>
+                            <option value="Guardian">Guardian</option>
+                            <option value="Grandparent">Grandparent</option>
+                          </select>
+                        </div>
+                        {!editingFamilyId && (
+                          <div className="md:col-span-2">
+                            <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Password</label>
+                            <input type="password" value={familyForm.password} onChange={(e) => setFamilyForm(prev => ({ ...prev, password: e.target.value }))} className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]" placeholder="At least 6 chars with caps, number, special symbol" required={!editingFamilyId} />
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Linked students</label>
+                          <select multiple value={familyForm.children} onChange={(e) => {
+                            const selected = Array.from(e.target.selectedOptions, option => option.value);
+                            setFamilyForm(prev => ({ ...prev, children: selected }));
+                          }} className="min-h-[120px] w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]">
+                            {students.length === 0 ? (
+                              <option value="">No students available</option>
+                            ) : (
+                              students.map(student => (
+                                <option key={student._id} value={student._id}>
+                                  {student.name} ({student.classId?.standard || 'N/A'} - {student.division || 'N/A'})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="mt-1 text-[10px] text-[#8a6a50]">Hold Ctrl/Cmd to select multiple children.</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.12em] text-[#8a6a50]">Notes</label>
+                          <textarea value={familyForm.notes} onChange={(e) => setFamilyForm(prev => ({ ...prev, notes: e.target.value }))} rows="3" className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm text-[#3f2a1d] outline-none focus:border-[#7a4e2d]" />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-2">
+                        {editingFamilyId && (
+                          <button type="button" onClick={resetFamilyForm} className="rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-2 text-sm font-semibold text-[#8a6a50] hover:bg-[#f4ecdf] transition">
+                            Cancel
+                          </button>
+                        )}
+                        <button type="submit" className="rounded-xl bg-[#7a4e2d] px-4 py-2 text-sm font-bold text-[#f7efe4] hover:bg-[#624021] transition">
+                          {editingFamilyId ? 'Update Family' : 'Create Family'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
+                    <h3 className="text-lg font-black text-[#3f2a1d] mb-4">Family directory</h3>
+                    <div className="space-y-3">
+                      {families.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-[#d9c5b0] bg-white/60 p-5 text-sm text-[#8a6a50] text-center">
+                          No family profiles have been created yet.
+                        </div>
+                      ) : (
+                        families.map((familyRecord) => (
+                          <div key={familyRecord._id} className="rounded-2xl border border-[#d9c5b0] bg-white p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-base font-black text-[#3f2a1d]">{familyRecord.name}</p>
+                                <p className="text-xs text-[#8a6a50]">{familyRecord.email}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <button type="button" onClick={() => handleOpenEditFamily(familyRecord)} className="p-1.5 text-[#7a4e2d] hover:bg-[#7a4e2d]/10 rounded-lg transition" title="Edit family">
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button type="button" onClick={() => handleDeleteFamily(familyRecord._id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition" title="Delete family">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a6a50]">
+                              <span className="rounded-full bg-[#7a4e2d]/10 px-2 py-1">{familyRecord.children?.length || 0} children</span>
+                              <span className="rounded-full bg-[#7a4e2d]/10 px-2 py-1">{familyRecord.relationshipToStudent || 'Parent'}</span>
+                            </div>
+
+                            {familyRecord.children?.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                {familyRecord.children.map((child) => (
+                                  <div key={child.studentId?._id || child.studentId} className="rounded-xl border border-[#d9c5b0]/70 bg-[#fffaf3] p-2 text-xs text-[#6d4c35]">
+                                    {child.studentName || 'Linked student'} · {child.studentClass || 'Class not assigned'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* CLASSES DIRECTORY TAB */}
             {activeTab === 'classes' && (
               <div className="space-y-6">
                 {/* Header */}
                 <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex justify-between items-center flex-wrap gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-[#3f2a1d]">Classes & Divisions Directory</h2>
-                    <p className="text-sm text-[#7f634e]">View, add divisions, or delete classes. Deleting a division will automatically redistribute students.</p>
+                    <h2 className="text-xl font-bold text-[#3f2a1d]">Classes & Sections Directory</h2>
+                    <p className="text-sm text-[#7f634e]">View, add sections, or delete classes. Deleting a section will automatically redistribute students.</p>
                   </div>
                   <button
                     onClick={handleOpenClassSetupModal}
@@ -2165,7 +2459,7 @@ const AdminDashboard = () => {
                       return null;
                     }
                     const sortedDivs = divs.sort((a, b) => a.division.localeCompare(b.division));
-                    const stdLabel = selectedManageClassStd.match(/^\d+$/) ? `Standard ${selectedManageClassStd}` : selectedManageClassStd;
+                    const stdLabel = selectedManageClassStd.match(/^\d+$/) ? `Grade ${selectedManageClassStd}` : selectedManageClassStd;
                     const totalStudents = students.filter(s => sortedDivs.some(cls => s.classId?._id === cls._id || s.classId === cls._id)).length;
 
                     return (
@@ -2182,7 +2476,7 @@ const AdminDashboard = () => {
                             <div>
                               <h3 className="text-xl font-black text-[#3f2a1d]">{stdLabel}</h3>
                               <p className="text-xs text-[#8a6a50] font-medium mt-0.5">
-                                Divisions: <span className="font-bold">{sortedDivs.length}</span> | Total Students: <span className="font-bold">{totalStudents}</span>
+                                Sections: <span className="font-bold">{sortedDivs.length}</span> | Total Students: <span className="font-bold">{totalStudents}</span>
                               </p>
                             </div>
                           </div>
@@ -2191,18 +2485,18 @@ const AdminDashboard = () => {
                             onClick={() => handleAddDivision(selectedManageClassStd)}
                             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition"
                           >
-                            <Plus className="h-4 w-4" /> Add Division
+                            <Plus className="h-4 w-4" /> Add Section
                           </button>
                         </div>
 
                         {/* List of Divisions in Detail View */}
                         <div className="space-y-3">
-                          <h4 className="text-xs font-bold text-[#8a6a50] uppercase tracking-wider">Configured Divisions</h4>
+                          <h4 className="text-xs font-bold text-[#8a6a50] uppercase tracking-wider">Configured Sections</h4>
                           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                             {sortedDivs.map(cls => (
                               <div key={cls._id} className="p-4 rounded-2xl border border-[#d9c5b0]/40 bg-[#fffaf3] flex items-center justify-between shadow-sm hover:shadow-md transition">
                                 <div>
-                                  <span className="text-sm font-bold text-[#3f2a1d]">Division {cls.division}</span>
+                                  <span className="text-sm font-bold text-[#3f2a1d]">Section {cls.division}</span>
                                   <p className="text-xs text-[#8a6a50] mt-0.5">Students: {students.filter(s => s.classId?._id === cls._id || s.classId === cls._id).length}</p>
                                 </div>
                                 <button
@@ -2211,7 +2505,7 @@ const AdminDashboard = () => {
                                     handleDeleteClass(cls._id);
                                   }}
                                   className="text-rose-600 hover:bg-rose-100 p-2 rounded-xl transition"
-                                  title={`Delete Division ${cls.division}`}
+                                  title={`Delete Section ${cls.division}`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -2228,7 +2522,7 @@ const AdminDashboard = () => {
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                       {sortedStds.map(std => {
                         const divs = grouped[std];
-                        const stdLabel = std.match(/^\d+$/) ? `Standard ${std}` : std;
+                        const stdLabel = std.match(/^\d+$/) ? `Grade ${std}` : std;
                         const totalStudents = students.filter(s => divs.some(cls => s.classId?._id === cls._id || s.classId === cls._id)).length;
 
                         return (
@@ -2250,7 +2544,7 @@ const AdminDashboard = () => {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation(); // prevent card click
-                                    if (window.confirm(`Are you sure you want to delete the whole Class "${stdLabel}" and all of its divisions?`)) {
+                                    if (window.confirm(`Are you sure you want to delete the whole Grade "${stdLabel}" and all of its sections?`)) {
                                       handleDeleteStandard(std);
                                     }
                                   }}
@@ -2264,7 +2558,7 @@ const AdminDashboard = () => {
                               {/* Division and Student counts */}
                               <div className="grid grid-cols-2 gap-2 text-center text-xs bg-[#fffaf3] border border-[#d9c5b0]/30 p-2.5 rounded-xl">
                                 <div>
-                                  <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Divisions</span>
+                                  <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Sections</span>
                                   <p className="font-extrabold text-[#6d4c35] mt-0.5">{divs.length}</p>
                                 </div>
                                 <div className="border-l border-[#d9c5b0]/30">
@@ -2293,7 +2587,7 @@ const AdminDashboard = () => {
                 <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex justify-between items-center flex-wrap gap-4">
                   <div>
                     <h2 className="text-xl font-bold text-[#3f2a1d]">Subject Directory</h2>
-                    <p className="text-sm text-[#7f634e]">Configure academic subjects, syllabus parameters, and map them standard-wise.</p>
+                    <p className="text-sm text-[#7f634e]">Configure academic subjects, syllabus parameters, and map them grade-wise.</p>
                   </div>
                   <button
                     onClick={() => setShowAddSubjectModal(true)}
@@ -2347,7 +2641,7 @@ const AdminDashboard = () => {
                                   <p className="font-extrabold text-[#6d4c35] mt-0.5">{sub.minMarks || 35}</p>
                                 </div>
                                 <div className="border-l border-[#d9c5b0]/30">
-                                  <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Total Stds</span>
+                                  <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Total Grades</span>
                                   <p className="font-extrabold text-[#6d4c35] mt-0.5">{stdsCount}</p>
                                 </div>
                               </div>
@@ -2356,9 +2650,9 @@ const AdminDashboard = () => {
 
                           {/* Small Standards Text */}
                           <div className="pt-2 border-t border-[#f4ecdf]">
-                            <span className="text-[9px] font-bold text-[#8a6a50] uppercase tracking-wider block">Assigned Standards</span>
+                            <span className="text-[9px] font-bold text-[#8a6a50] uppercase tracking-wider block">Assigned Grades</span>
                             <p className="text-xs font-semibold text-[#7a4e2d] truncate mt-0.5">
-                              {sub.standard ? sub.standard.split(',').sort(sortStandards).map(s => s.match(/^\d+$/) ? `Std ${s}` : s).join(', ') : 'All Standards'}
+                              {sub.standard ? sub.standard.split(',').sort(sortStandards).map(s => s.match(/^\d+$/) ? `Grade ${s}` : s).join(', ') : 'All Grades'}
                             </p>
                           </div>
                         </div>
@@ -2380,7 +2674,7 @@ const AdminDashboard = () => {
                 <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex justify-between items-center flex-wrap gap-4">
                   <div>
                     <h2 className="text-xl font-bold text-[#3f2a1d]">Exams & Assessments Directory</h2>
-                    <p className="text-sm text-[#7f634e]">Click a standard card to view and manage its exams.</p>
+                    <p className="text-sm text-[#7f634e]">Click a grade card to view and manage its exams.</p>
                   </div>
                   <button
                     onClick={() => setShowAddExamModal(true)}
@@ -2488,7 +2782,7 @@ const AdminDashboard = () => {
 
                         {/* Inside checklist: Standards & Divisions */}
                         <div className="space-y-3">
-                          <h4 className="text-xs font-bold text-[#8a6a50] uppercase tracking-wider">Assigned Classes & Divisions Checklist</h4>
+                          <h4 className="text-xs font-bold text-[#8a6a50] uppercase tracking-wider">Assigned Classes & Sections Checklist</h4>
                           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
                             {(() => {
                               const stdGrouped = {};
@@ -2501,7 +2795,7 @@ const AdminDashboard = () => {
 
                               return sortedStds.map(std => {
                                 const stdExams = stdGrouped[std].sort((a, b) => a.classId.division.localeCompare(b.classId.division));
-                                const stdLabel = std.match(/^\d+$/) ? `Std ${std}` : std;
+                                const stdLabel = std.match(/^\d+$/) ? `Grade ${std}` : std;
                                 const stdExamIds = stdExams.map(e => e._id);
                                 const allStdSelected = stdExamIds.every(id => selectedExamKeys.includes(id));
                                 
@@ -2570,7 +2864,7 @@ const AdminDashboard = () => {
                         
                         // Get list of sorted standards for small text
                         const stds = [...new Set(examList.map(e => e.classId.standard))].sort(sortStandards);
-                        const stdsLabel = stds.map(s => s.match(/^\d+$/) ? `Std ${s}` : s).join(', ');
+                        const stdsLabel = stds.map(s => s.match(/^\d+$/) ? `Grade ${s}` : s).join(', ');
 
                         return (
                           <div
@@ -2619,7 +2913,7 @@ const AdminDashboard = () => {
                                       <p className="font-extrabold text-[#6d4c35] mt-0.5">{passingMarks || 35}</p>
                                     </div>
                                     <div className="border-l border-[#d9c5b0]/30">
-                                      <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Total Stds</span>
+                                      <span className="text-[10px] text-[#8a6a50] uppercase font-bold">Total Grades</span>
                                       <p className="font-extrabold text-[#6d4c35] mt-0.5">{stdsCount}</p>
                                     </div>
                                   </div>
@@ -2628,7 +2922,7 @@ const AdminDashboard = () => {
 
                               {/* Small Standards Text */}
                               <div className="pt-2 border-t border-[#f4ecdf]">
-                                <span className="text-[9px] font-bold text-[#8a6a50] uppercase tracking-wider block">Assigned Standards</span>
+                                <span className="text-[9px] font-bold text-[#8a6a50] uppercase tracking-wider block">Assigned Grades</span>
                                 <p className="text-xs font-semibold text-[#7a4e2d] truncate mt-0.5">{stdsLabel}</p>
                               </div>
                             </div>
@@ -2648,10 +2942,10 @@ const AdminDashboard = () => {
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div>
                     <h2 className="text-2xl font-black text-[#3f2a1d]">
-                      {selectedFeeStd ? `📋 ${selectedFeeStd === selectedFeeStd ? `Standard ${selectedFeeStd}` : selectedFeeStd} — Student Fees` : '💰 Manage Fees'}
+                      {selectedFeeStd ? `📋 ${selectedFeeStd === selectedFeeStd ? `Grade ${selectedFeeStd}` : selectedFeeStd} — Student Fees` : '💰 Manage Fees'}
                     </h2>
                     <p className="text-xs text-[#8a6a50] mt-1">
-                      {selectedFeeStd ? 'Click quarters to toggle payment status for each student.' : 'Configure standard-wise annual fees split into 4 equal quarters.'}
+                      {selectedFeeStd ? 'Click quarters to toggle payment status for each student.' : 'Configure grade-wise annual fees split into 4 equal quarters.'}
                     </p>
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -2685,8 +2979,8 @@ const AdminDashboard = () => {
                         return (
                           <div className="text-center py-16 text-[#8a6a50]">
                             <DollarSign className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                            <p className="font-bold text-sm">No students found for this standard.</p>
-                            <p className="text-xs mt-1">Add students to Standard {selectedFeeStd} to track fees.</p>
+                            <p className="font-bold text-sm">No students found for this grade.</p>
+                            <p className="text-xs mt-1">Add students to Grade {selectedFeeStd} to track fees.</p>
                           </div>
                         );
                       }
@@ -2709,7 +3003,7 @@ const AdminDashboard = () => {
                                   <div>
                                     <h3 className="font-black text-[#3f2a1d] text-base leading-tight">{student?.name || 'Unknown'}</h3>
                                     <p className="text-[10px] text-[#8a6a50] mt-0.5">
-                                      Roll: {student?.rollNumber || '—'} &nbsp;|&nbsp; Div: {cls?.division || '—'}
+                                      Roll: {student?.rollNumber || '—'} &nbsp;|&nbsp; Section: {cls?.division || '—'}
                                     </p>
                                     <p className="text-[10px] text-[#8a6a50]">{student?.email || ''}</p>
                                   </div>
@@ -2768,7 +3062,7 @@ const AdminDashboard = () => {
                       <div className="text-center py-20 text-[#8a6a50]">
                         <DollarSign className="h-14 w-14 mx-auto mb-4 opacity-25" />
                         <p className="font-bold text-base">No fee structures configured yet.</p>
-                        <p className="text-xs mt-1">Click "Set Standard Fee" to configure fees for a standard.</p>
+                        <p className="text-xs mt-1">Click "Set Grade Fee" to configure fees for a grade.</p>
                       </div>
                     ) : (
                       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -2789,7 +3083,7 @@ const AdminDashboard = () => {
                               <div className="flex items-start justify-between gap-2">
                                 <div>
                                   <h3 className="text-xl font-black text-[#3f2a1d] group-hover:text-[#7a4e2d] transition">
-                                    {struct.standard.match(/^\d+$/) ? `Standard ${struct.standard}` : struct.standard}
+                                    {struct.standard.match(/^\d+$/) ? `Grade ${struct.standard}` : struct.standard}
                                   </h3>
                                   <p className="text-[10px] text-[#8a6a50] mt-0.5">{struct.totalMonths} months · {struct.academicYear || ''} · {stdStudentCount} student{stdStudentCount !== 1 ? 's' : ''}</p>
                                 </div>
@@ -2867,11 +3161,11 @@ const AdminDashboard = () => {
                   <form onSubmit={handleFeeSubmit} className="space-y-4">
                     {/* Standard selector */}
                     <div>
-                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Standard *</label>
+                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Grade *</label>
                       {editingFeeId ? (
                         <div className="w-full rounded-xl border border-[#d9c5b0] bg-[#f4ecdf] px-3 py-2.5 text-sm text-[#6d4c35] font-bold flex items-center gap-2">
                           <span>🔒</span>
-                          <span>{feeForm.standard.match(/^\d+$/) ? `Standard ${feeForm.standard}` : feeForm.standard}</span>
+                          <span>{feeForm.standard.match(/^\d+$/) ? `Grade ${feeForm.standard}` : feeForm.standard}</span>
                         </div>
                       ) : (
                         <select
@@ -2880,12 +3174,12 @@ const AdminDashboard = () => {
                           required
                           className="w-full rounded-xl border border-[#d9c5b0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#7a4e2d]"
                         >
-                          <option value="">— Select Standard —</option>
+                              <option value="">— Select Grade —</option>
                           {[...new Set(classes.map(c => c.standard))]
                             .filter(std => !feeStructures.some(f => f.standard === std))
                             .sort(sortStandards)
                             .map(std => (
-                              <option key={std} value={std}>{std.match(/^\d+$/) ? `Standard ${std}` : std}</option>
+                              <option key={std} value={std}>{std.match(/^\d+$/) ? `Grade ${std}` : std}</option>
                             ))
                           }
                         </select>
@@ -3047,7 +3341,7 @@ const AdminDashboard = () => {
 
                     <div>
                       <label className="block text-xs font-bold text-[#6d4c35] mb-1">
-                        Assign to Standards *
+                        Assign to Grades *
                         <span className="text-[10px] text-[#7a4e2d] ml-1 font-extrabold font-mono">
                           (Selected: {subjectForm.standards?.length || 0})
                         </span>
@@ -3092,7 +3386,7 @@ const AdminDashboard = () => {
                                         }}
                                         className="rounded border-[#d9c5b0] text-[#7a4e2d] focus:ring-[#7a4e2d] h-3.5 w-3.5 cursor-pointer"
                                       />
-                                      {std.match(/^\d+$/) ? `Std ${std}` : std}
+                                      {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                     </label>
                                   );
                                 })}
@@ -3101,7 +3395,7 @@ const AdminDashboard = () => {
 
                             {subjectForm.standards && subjectForm.standards.length > 0 && (
                               <div className="space-y-3 mt-3 p-3 border border-[#d9c5b0]/55 bg-[#fffaf3] rounded-xl">
-                                <label className="block text-xs font-bold text-[#6d4c35]">Standard-wise Yearly Lectures & Duration Config</label>
+                                <label className="block text-xs font-bold text-[#6d4c35]">Grade-wise Yearly Lectures & Duration Config</label>
                                 <div className="grid grid-cols-3 gap-4 max-h-[25rem] overflow-y-auto pr-1">
                                   {subjectForm.standards.map(std => {
                                     const matched = subjectForm.lecturesPerStandard?.find(l => l.standard === std);
@@ -3129,7 +3423,7 @@ const AdminDashboard = () => {
                                       <div key={std} className="p-3 border border-[#d9c5b0] bg-white rounded-2xl space-y-3 text-xs shadow-xs hover:border-[#7a4e2d]/40 transition">
                                         <div className="flex justify-between items-center bg-[#7a4e2d]/5 px-2.5 py-1 rounded-lg">
                                           <span className="font-bold text-[#7a4e2d]">
-                                            {std.match(/^\d+$/) ? `Std ${std}` : std}
+                                            {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                           </span>
                                         </div>
                                         
@@ -3233,7 +3527,7 @@ const AdminDashboard = () => {
                     {!editingExamId ? (
                       <div>
                         <label className="block text-xs font-bold text-[#6d4c35] mb-1">
-                          Assign to Standards *
+                          Assign to Grades *
                           <span className="text-[10px] text-[#7a4e2d] ml-1 font-extrabold font-mono">
                             (Selected: {examForm.standards?.length || 0})
                           </span>
@@ -3278,7 +3572,7 @@ const AdminDashboard = () => {
                                           }}
                                           className="rounded border-[#d9c5b0] text-[#7a4e2d] focus:ring-[#7a4e2d] h-3.5 w-3.5 cursor-pointer"
                                         />
-                                        {std.match(/^\d+$/) ? `Std ${std}` : std}
+                                        {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                       </label>
                                     );
                                   })}
@@ -3290,11 +3584,11 @@ const AdminDashboard = () => {
                       </div>
                     ) : (
                       <div>
-                        <label className="block text-xs font-bold text-[#6d4c35] mb-1">Standard (Read-only during edit)</label>
+                        <label className="block text-xs font-bold text-[#6d4c35] mb-1">Grade (Read-only during edit)</label>
                         <input
                           type="text"
                           disabled
-                          value={examForm.standards?.[0] ? `Standard ${examForm.standards[0]}` : 'N/A'}
+                          value={examForm.standards?.[0] ? `Grade ${examForm.standards[0]}` : 'N/A'}
                           className="w-full rounded-xl border border-[#d9c5b0] bg-gray-100 px-3 py-2 text-sm outline-none cursor-not-allowed"
                         />
                       </div>
@@ -3771,7 +4065,7 @@ const AdminDashboard = () => {
                   <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex justify-between items-center flex-wrap gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-[#3f2a1d]">Teacher Assignments</h2>
-                      <p className="text-sm text-[#7f634e]">Manage teacher subject and standard assignments. Divisions are automatically balanced based on workload.</p>
+                      <p className="text-sm text-[#7f634e]">Manage teacher subject and grade assignments. Sections are automatically balanced based on workload.</p>
                     </div>
                   </div>
 
@@ -3804,7 +4098,7 @@ const AdminDashboard = () => {
 
                           {/* Active Assignments list */}
                           <div className="border-t border-[#d9c5b0]/40 pt-3 space-y-2">
-                            <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider">Assigned Subjects & Standards</p>
+                            <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider">Assigned Subjects & Grades</p>
                             {teacher.assignedSubjectStandards && teacher.assignedSubjectStandards.length > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
                                 {teacher.assignedSubjectStandards.map(ass => {
@@ -3821,7 +4115,7 @@ const AdminDashboard = () => {
                             )}
 
                             {/* Dynamically Allocated Divisions list */}
-                            <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider pt-1">Allocated Divisions (Auto-Balanced)</p>
+                            <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider pt-1">Allocated Sections (Auto-Balanced)</p>
                             {teacher.subjectClassAssignments && teacher.subjectClassAssignments.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {teacher.subjectClassAssignments.map(ass => {
@@ -3835,7 +4129,7 @@ const AdminDashboard = () => {
                                 })}
                               </div>
                             ) : (
-                              <p className="text-xs text-[#8a6a50] italic">No allocated divisions</p>
+                              <p className="text-xs text-[#8a6a50] italic">No allocated sections</p>
                             )}
                           </div>
                         </div>
@@ -4120,8 +4414,8 @@ const AdminDashboard = () => {
                             /* 1. STUDENT VIEW (CLASS DIVISION WISE GRIDS) */
                             <div className="space-y-4">
                               <div className="border-b border-[#d9c5b0] pb-2 no-print">
-                                <h3 className="text-lg font-bold text-[#3f2a1d]">Class Division Timetables (Student View)</h3>
-                                <p className="text-xs text-[#8a6a50]">Weekly class division grids (Days vs Time Slots)</p>
+                                <h3 className="text-lg font-bold text-[#3f2a1d]">Class Section Timetables (Student View)</h3>
+                                <p className="text-xs text-[#8a6a50]">Weekly class section grids (Days vs Time Slots)</p>
                               </div>
 
                               <div className="grid gap-6 md:grid-cols-2">
@@ -4158,7 +4452,7 @@ const AdminDashboard = () => {
                                   return (
                                     <div key={cls._id} id={cardId} className="rounded-3xl border border-[#d9c5b0] bg-[#fffaf3] p-5 shadow-xs space-y-3 overflow-x-auto print-card">
                                       <div className="flex justify-between items-center border-b border-[#d9c5b0]/35 pb-1.5 no-print">
-                                        <span className="text-xs font-bold text-[#7a4e2d]">Std {cls.standard} ({cls.division})</span>
+                                        <span className="text-xs font-bold text-[#7a4e2d]">Grade {cls.standard} (Section {cls.division})</span>
                                         <button
                                           type="button"
                                           onClick={() => printSpecificTimetable(cardId)}
@@ -4170,7 +4464,7 @@ const AdminDashboard = () => {
 
                                       <div className="hidden print:block mb-4 text-center">
                                         <h1 className="text-xl font-black text-[#3f2a1d]">{schoolName || 'School Hub'}</h1>
-                                        <h2 className="text-md font-bold text-[#7a4e2d]">Class Timetable — Std {cls.standard} ({cls.division})</h2>
+                                        <h2 className="text-md font-bold text-[#7a4e2d]">Class Timetable — Grade {cls.standard} (Section {cls.division})</h2>
                                         <p className="text-[10px] text-gray-500">Academic Year: 2026-2027</p>
                                       </div>
 
@@ -4285,7 +4579,7 @@ const AdminDashboard = () => {
                                         );
                                         if (found) {
                                           match = found;
-                                          className = t.classId ? `Std ${t.classId.standard} (${t.classId.division})` : 'Class';
+                                          className = t.classId ? `Grade ${t.classId.standard} (Section ${t.classId.division})` : 'Class';
                                           break;
                                         }
                                       }
@@ -4619,10 +4913,10 @@ const AdminDashboard = () => {
                     {teacherForm.isClassTeacher && (
                       <div className="col-span-2 grid grid-cols-2 gap-4 bg-[#faf4ea]/50 p-4 rounded-2xl border border-[#d9c5b0]">
                         <div className="col-span-2">
-                          <h5 className="text-xs font-bold text-[#7a4e2d]">Assign Class by Std & Division</h5>
+                          <h5 className="text-xs font-bold text-[#7a4e2d]">Assign Class by Grade & Section</h5>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Standard *</label>
+                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Grade *</label>
                           <select
                             required
                             value={teacherForm.classTeacherStandard || ''}
@@ -4637,14 +4931,14 @@ const AdminDashboard = () => {
                             }}
                             className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2 text-sm outline-none focus:bg-white"
                           >
-                            <option value="">-- Select Standard --</option>
+                            <option value="">-- Select Grade --</option>
                             {[...new Set(classes.map(c => c.standard))].sort(sortStandards).map(std => (
                               <option key={std} value={std}>{std}</option>
                             ))}
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Division *</label>
+                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Section *</label>
                           <select
                             required
                             disabled={!teacherForm.classTeacherStandard}
@@ -4659,7 +4953,7 @@ const AdminDashboard = () => {
                             }}
                             className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2 text-sm outline-none focus:bg-white disabled:opacity-50"
                           >
-                            <option value="">-- Select Division --</option>
+                            <option value="">-- Select Section --</option>
                             {teacherForm.classTeacherStandard && classes
                               .filter(c => c.standard === teacherForm.classTeacherStandard)
                               .map(c => c.division)
@@ -4920,7 +5214,7 @@ const AdminDashboard = () => {
                                     className="h-4 w-4 accent-[#7a4e2d] cursor-pointer"
                                   />
                                   <label htmlFor={`std-all-${std}`} className="font-black text-[#3f2a1d] text-sm cursor-pointer">
-                                    {std.match(/^\d+$/) ? `Standard ${std}` : std}
+                                    {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                   </label>
                                   <span className="ml-auto text-[10px] text-[#8a6a50]">{stdSubjects.length} subject{stdSubjects.length !== 1 ? 's' : ''}</span>
                                 </div>
@@ -5088,7 +5382,7 @@ const AdminDashboard = () => {
                             className="h-4 w-4 accent-[#7a4e2d] cursor-pointer"
                           />
                           <label htmlFor={`asgn-std-${std}`} className="font-black text-[#3f2a1d] text-sm cursor-pointer flex-1">
-                            {std.match(/^\d+$/) ? `Standard ${std}` : std}
+                            {std.match(/^\d+$/) ? `Grade ${std}` : std}
                           </label>
                           <span className="text-[10px] text-[#8a6a50]">{stdSubjects.length} subject{stdSubjects.length !== 1 ? 's' : ''}</span>
                         </div>
@@ -5394,21 +5688,21 @@ const AdminDashboard = () => {
                 {studentModalTab === 'academic' && (
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Standard / Class *</label>
+                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Grade / Class *</label>
                       <select
                         required
                         value={studentForm.classStandard || ''}
                         onChange={(e) => setStudentForm({ ...studentForm, classStandard: e.target.value, classDivision: '' })}
                         className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2 text-sm outline-none focus:bg-white"
                       >
-                        <option value="">-- Select Standard --</option>
+                        <option value="">-- Select Grade --</option>
                         {[...new Set(classes.map(c => c.standard))].sort(sortStandards).map(std => (
                           <option key={std} value={std}>{std}</option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Division / Section *</label>
+                      <label className="block text-xs font-bold text-[#6d4c35] mb-1">Section *</label>
                       <select
                         required
                         disabled={!studentForm.classStandard}
@@ -5416,7 +5710,7 @@ const AdminDashboard = () => {
                         onChange={(e) => setStudentForm({ ...studentForm, classDivision: e.target.value })}
                         className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2 text-sm outline-none focus:bg-white disabled:opacity-50"
                       >
-                        <option value="">-- Select Division --</option>
+                        <option value="">-- Select Section --</option>
                         {studentForm.classStandard && classes
                           .filter(c => c.standard === studentForm.classStandard)
                           .map(c => c.division)
@@ -5699,7 +5993,7 @@ const AdminDashboard = () => {
                   )}
                   <div>
                     <h2 className="text-2xl font-black text-[#3f2a1d]">{selectedStudentForDetails.name}</h2>
-                    <p className="text-sm text-[#7f634e]">Student ID: <span className="font-semibold">{selectedStudentForDetails.studentId || 'N/A'}</span> | Class: <span className="font-semibold">{selectedStudentForDetails.classId?.standard || 'N/A'} ({selectedStudentForDetails.division || 'N/A'})</span></p>
+                    <p className="text-sm text-[#7f634e]">Student ID: <span className="font-semibold">{selectedStudentForDetails.studentId || 'N/A'}</span> | Grade: <span className="font-semibold">{selectedStudentForDetails.classId?.standard || 'N/A'} | Section {selectedStudentForDetails.division || 'N/A'}</span></p>
                   </div>
                 </div>
                 <button onClick={() => { setShowStudentDetailsModal(false); setSelectedStudentForDetails(null); }} className="p-2 text-[#8a6a50] hover:bg-[#f4ecdf] rounded-full transition">
@@ -6035,7 +6329,7 @@ const AdminDashboard = () => {
                     if (!struct) {
                       return (
                         <p className="text-center py-10 text-[#8a6a50] italic border border-dashed border-[#d9c5b0] rounded-2xl">
-                          No annual fees configured for Standard {selectedStudentForDetails.classId?.standard || 'N/A'} yet.
+                          No annual fees configured for Grade {selectedStudentForDetails.classId?.standard || 'N/A'} yet.
                         </p>
                       );
                     }
@@ -6055,7 +6349,7 @@ const AdminDashboard = () => {
                           <div className="p-5 border border-[#d9c5b0] bg-white rounded-2xl space-y-1 text-center">
                             <p className="text-[10px] uppercase font-bold text-[#8a6a50]">Total Annual Fee</p>
                             <p className="text-2xl font-black text-[#7a4e2d]">${totalAmount}</p>
-                            <p className="text-xs text-gray-400">Standard {struct.standard}</p>
+                            <p className="text-xs text-gray-400">Grade {struct.standard}</p>
                           </div>
                           <div className="p-5 border border-[#d9c5b0] bg-white rounded-2xl space-y-1 text-center">
                             <p className="text-[10px] uppercase font-bold text-[#8a6a50]">Total Paid</p>
@@ -6171,7 +6465,7 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between border-b border-[#d9c5b0]/50 pb-4">
                 <div>
                   <h2 className="text-2xl font-black text-[#7a4e2d]">School Class Setup</h2>
-                  <p className="text-xs text-[#8a6a50]">Configure standards, pre-primary stages, and their divisions count.</p>
+                  <p className="text-xs text-[#8a6a50]">Configure grades, pre-primary stages, and section counts.</p>
                 </div>
                 <button
                   onClick={() => setShowClassSetupModal(false)}
@@ -6184,7 +6478,7 @@ const AdminDashboard = () => {
               <form onSubmit={handleSaveClassSetup} className="space-y-6">
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs font-bold text-[#6d4c35] mb-2">Total Numeric Standards</label>
+                    <label className="block text-xs font-bold text-[#6d4c35] mb-2">Total Numeric Grades</label>
                     <input
                       type="number"
                       min={0}
@@ -6193,7 +6487,7 @@ const AdminDashboard = () => {
                       onChange={(e) => setTotalNumericStandards(parseInt(e.target.value || 0, 10))}
                       className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-2.5 text-sm outline-none focus:border-[#7a4e2d] focus:bg-white transition"
                     />
-                    <p className="text-[10px] text-[#8a6a50] mt-1">E.g., 10 creates Std 1 to 10 automatically.</p>
+                    <p className="text-[10px] text-[#8a6a50] mt-1">E.g., 10 creates Grades 1 to 10 automatically.</p>
                   </div>
 
                   <div>
@@ -6222,8 +6516,8 @@ const AdminDashboard = () => {
                 <div className="border-t border-[#d9c5b0]/50 pt-4">
                   <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
                     <div>
-                      <h4 className="text-sm font-bold text-[#3f2a1d]">Divisions Configuration (Per Standard)</h4>
-                      <p className="text-xs text-[#8a6a50]">Set standard-specific division count (e.g., 4 creates divisions A-D).</p>
+                      <h4 className="text-sm font-bold text-[#3f2a1d]">Section Configuration (Per Grade)</h4>
+                      <p className="text-xs text-[#8a6a50]">Set the number of sections for each grade (e.g., 4 creates sections A-D).</p>
                     </div>
                     <div className="flex items-center gap-2 bg-white border border-[#d9c5b0]/50 p-2 rounded-xl">
                       <span className="text-xs font-bold text-[#6d4c35]">Apply to all:</span>
@@ -6244,7 +6538,7 @@ const AdminDashboard = () => {
                             nextMap[std] = val;
                           }
                           setDivisionsCountMap(nextMap);
-                          toast.success(`Applied ${val} divisions to all active standards!`);
+                          toast.success(`Applied ${val} sections to all active grades!`);
                         }}
                         className="bg-[#7a4e2d] hover:bg-[#624021] text-[#f7efe4] text-xs font-bold px-3 py-1 rounded-lg transition"
                       >
@@ -6258,7 +6552,7 @@ const AdminDashboard = () => {
                       <div key={std} className="flex items-center justify-between p-3 rounded-xl border border-[#d9c5b0]/30 bg-white shadow-sm">
                         <span className="text-xs font-bold text-[#7a4e2d]">{std}</span>
                         <div className="flex items-center gap-1.5">
-                          <label className="text-[9px] text-[#8a6a50] font-semibold uppercase">Divs:</label>
+                          <label className="text-[9px] text-[#8a6a50] font-semibold uppercase">Sections:</label>
                           <input
                             type="number"
                             min={1}
@@ -6334,8 +6628,8 @@ const AdminDashboard = () => {
               <div className="w-full max-w-3xl bg-[#fffaf3] rounded-[2rem] border border-[#d9c5b0] p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center border-b border-[#d9c5b0] pb-4">
                   <div>
-                    <h2 className="text-xl font-black text-[#3f2a1d]">📚 Assign Subjects & Standards</h2>
-                    <p className="text-sm text-[#7f634e]">Assign subjects and classes for {t.name}. Divisions will be auto-allocated.</p>
+                      <h2 className="text-xl font-black text-[#3f2a1d]">📚 Assign Subjects & Grades</h2>
+                    <p className="text-sm text-[#7f634e]">Assign subjects and classes for {t.name}. Sections will be auto-allocated.</p>
                   </div>
                   <button onClick={() => { setShowAssignModal(false); setAssigningTeacher(null); }} className="p-2 text-[#8a6a50] hover:bg-[#f4ecdf] rounded-full transition">
                     <X className="h-6 w-6" />
@@ -6382,7 +6676,7 @@ const AdminDashboard = () => {
 
                           {isSubjectChecked && (
                             <div className="mt-3 pl-7 border-t border-[#d9c5b0]/30 pt-3 space-y-2">
-                              <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider">Select Standards</p>
+                              <p className="text-[10px] font-bold text-[#8a6a50] uppercase tracking-wider">Select Grades</p>
                               <div className="flex flex-wrap gap-2">
                                 {subjectStandards.map(std => {
                                   const isStdChecked = activeStds.includes(std);
@@ -6409,7 +6703,7 @@ const AdminDashboard = () => {
                                         }}
                                         className="hidden"
                                       />
-                                      {std.match(/^\d+$/) ? `Std ${std}` : std}
+                                      {std.match(/^\d+$/) ? `Grade ${std}` : std}
                                     </label>
                                   );
                                 })}

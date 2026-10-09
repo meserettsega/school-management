@@ -2,6 +2,34 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const Teacher = require('../models/Teacher');
 const Student = require('../models/Student');
+const Family = require('../models/Family');
+
+exports.getContacts = async (req, res) => {
+  try {
+    const schoolId = req.user.schoolId;
+    const userRole = req.user.role;
+    const contacts = [];
+
+    if (userRole === 'family' || userRole === 'teacher' || userRole === 'student') {
+      const administrators = await User.find({ schoolId, role: 'admin', isActive: true }).select('name email avatar');
+      contacts.push(...administrators.map(user => ({ ...user.toObject(), role: 'Administrator' })));
+    }
+
+    if (userRole === 'family' || userRole === 'admin') {
+      const teachers = await Teacher.find({ schoolId, isActive: true }).select('name email avatar');
+      contacts.push(...teachers.map(teacher => ({ ...teacher.toObject(), role: 'Teacher' })));
+    }
+
+    if (userRole === 'admin' || userRole === 'teacher') {
+      const families = await Family.find({ schoolId, isActive: true }).select('name email avatar');
+      contacts.push(...families.map(family => ({ ...family.toObject(), role: 'Family' })));
+    }
+
+    res.json({ contacts });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // Send Message
 exports.sendMessage = async (req, res) => {
@@ -9,17 +37,33 @@ exports.sendMessage = async (req, res) => {
     const { recipientId, subject, message, attachments } = req.body;
 
     const senderRole = req.user.role;
-    const senderModel = senderRole === 'admin' ? 'User' : (senderRole === 'teacher' ? 'Teacher' : 'Student');
+    const senderModels = { admin: 'User', teacher: 'Teacher', student: 'Student', family: 'Family' };
+    const senderModel = senderModels[senderRole];
+    if (!senderModel) return res.status(403).json({ message: 'Messaging is not available for this role' });
 
-    let recipientModel = 'Student';
-    const isUser = await User.exists({ _id: recipientId });
-    if (isUser) {
-      recipientModel = 'User';
-    } else {
-      const isTeacher = await Teacher.exists({ _id: recipientId });
-      if (isTeacher) {
-        recipientModel = 'Teacher';
+    const recipientModels = [
+      ['User', User, { role: 'admin' }],
+      ['Teacher', Teacher, {}],
+      ['Student', Student, {}],
+      ['Family', Family, {}],
+    ];
+    let recipientModel;
+    for (const [modelName, Model, extraQuery] of recipientModels) {
+      if (await Model.exists({ _id: recipientId, schoolId: req.user.schoolId, ...extraQuery })) {
+        recipientModel = modelName;
+        break;
       }
+    }
+    if (!recipientModel) return res.status(404).json({ message: 'Recipient not found in this school' });
+
+    const allowedRecipients = {
+      admin: ['Teacher', 'Family'],
+      teacher: ['User', 'Student', 'Family'],
+      student: ['User', 'Teacher'],
+      family: ['User', 'Teacher'],
+    };
+    if (!allowedRecipients[senderRole]?.includes(recipientModel)) {
+      return res.status(403).json({ message: 'You cannot message this contact' });
     }
 
     const newMessage = await Message.create({

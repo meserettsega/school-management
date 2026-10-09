@@ -15,7 +15,7 @@ const messageSchema = new mongoose.Schema(
     senderModel: {
       type: String,
       required: true,
-      enum: ['User', 'Teacher', 'Student'],
+      enum: ['User', 'Teacher', 'Student', 'Family'],
       default: 'User',
     },
     recipientId: {
@@ -26,7 +26,7 @@ const messageSchema = new mongoose.Schema(
     recipientModel: {
       type: String,
       required: true,
-      enum: ['User', 'Teacher', 'Student'],
+      enum: ['User', 'Teacher', 'Student', 'Family'],
       default: 'User',
     },
     subject: String,

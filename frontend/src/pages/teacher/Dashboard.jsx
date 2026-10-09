@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   AlertCircle, BookOpen, CheckCircle, ClipboardList, GraduationCap, LayoutGrid, 
   Users, Wand2, Search, Mail, Phone, Calendar, MapPin, Lock, Unlock, Clock,
-  User, FileText, Send, Image, History, ShieldAlert, DollarSign, Award, X, Bell, BookOpenCheck, Menu, Trash2, Plus
+  User, FileText, Send, Image, History, ShieldAlert, DollarSign, Award, X, Bell, BookOpenCheck, Menu, Trash2, Plus, MessageSquare
 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import apiClient from '../../utils/apiClient';
 import { openProxiedFile } from '../../utils/fileProxy';
+import MessagingPanel from '../../components/MessagingPanel';
+import MessageNotifications from '../../components/MessageNotifications';
+import NationalExamManager from '../../components/NationalExamManager';
 
 const TeacherDashboard = () => {
   const getTabFromHash = () => {
     const hash = window.location.hash.replace('#/', '');
-    const validTabs = ['overview', 'students', 'homework', 'notices', 'timetable', 'attendance', 'marks', 'profile', 'grievances', 'security'];
+    const validTabs = ['overview', 'students', 'homework', 'notices', 'timetable', 'attendance', 'marks', 'national-exams', 'profile', 'grievances', 'security', 'messages'];
     if (hash && validTabs.includes(hash)) {
       return hash;
     }
@@ -55,6 +58,8 @@ const TeacherDashboard = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeTab]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [messageTarget, setMessageTarget] = useState({ id: '', request: 0 });
+  const [messageContacts, setMessageContacts] = useState([]);
   const [students, setStudents] = useState([]);
   const [allClasses, setAllClasses] = useState([]);
   const [selectedDirSubjectId, setSelectedDirSubjectId] = useState(null);
@@ -65,6 +70,14 @@ const TeacherDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [teacherTimetables, setTeacherTimetables] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const openMessages = (contactId = '') => {
+    if (contactId) {
+      setMessageTarget(previous => ({ id: contactId, request: previous.request + 1 }));
+    }
+    setActiveTab('messages');
+    setIsSidebarOpen(false);
+  };
 
   // Homework management states
   const [assignedHomework, setAssignedHomework] = useState([]);
@@ -437,7 +450,7 @@ const TeacherDashboard = () => {
     relevantExams.forEach(ex => {
       const std = ex.classId?.standard;
       const dateStr = ex.date ? new Date(ex.date).toISOString().split('T')[0] : '';
-      const groupKey = `${ex.name} (Std ${std}) - ${dateStr}`;
+      const groupKey = `${ex.name} (Grade ${std}) - ${dateStr}`;
       seenGroupKeys.add(groupKey);
     });
 
@@ -464,7 +477,7 @@ const TeacherDashboard = () => {
     
     const matchedGroupExam = relevantExams.find(ex => {
       const dateStr = ex.date ? new Date(ex.date).toISOString().split('T')[0] : '';
-      const groupKey = `${ex.name} (Std ${ex.classId?.standard}) - ${dateStr}`;
+      const groupKey = `${ex.name} (Grade ${ex.classId?.standard}) - ${dateStr}`;
       return groupKey === activeExamGroupKey;
     });
 
@@ -484,6 +497,9 @@ const TeacherDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    apiClient.get('/messages/contacts')
+      .then(res => setMessageContacts(res.data.contacts || []))
+      .catch(() => {});
   }, []);
 
   const handleChangePassword = async (e) => {
@@ -625,8 +641,10 @@ const TeacherDashboard = () => {
               <div className="space-y-1">
                 {[
                   ['homework', 'Homework & Grading', ClipboardList],
+                  ['national-exams', 'National Exam Practice', BookOpenCheck],
                   ['notices', 'Notice Board', Bell],
                   ['timetable', 'My Class Timetable', Calendar],
+                  ['messages', 'Messages', MessageSquare],
                 ].map(([id, label, Icon]) => (
                   <button
                     key={id}
@@ -641,18 +659,16 @@ const TeacherDashboard = () => {
                   </button>
                 ))}
 
-                {profileData?.isClassTeacher && (
-                  <button
-                    onClick={() => {
-                      setActiveTab('attendance');
-                      setSearchQuery('');
-                      setIsSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'attendance' ? 'bg-[#7a4e2d] text-[#f7efe4]' : 'text-[#6d4c35] hover:bg-[#7a4e2d]/10'}`}
-                  >
-                    <CheckCircle className="h-4 w-4" /> Class Attendance
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setActiveTab('attendance');
+                    setSearchQuery('');
+                    setIsSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === 'attendance' ? 'bg-[#7a4e2d] text-[#f7efe4]' : 'text-[#6d4c35] hover:bg-[#7a4e2d]/10'}`}
+                >
+                  <CheckCircle className="h-4 w-4" /> Class Attendance
+                </button>
               </div>
             </div>
 
@@ -678,7 +694,7 @@ const TeacherDashboard = () => {
               <div className="space-y-1 pl-2 border-l border-[#d9c5b0]/45 ml-2">
                 {profileData?.subjectClassAssignments?.map((ass, index) => {
                   if (!ass.classId || !ass.subjectId) return null;
-                  const label = `Std ${ass.classId.standard}${ass.classId.division} - ${ass.subjectId.name}`;
+                  const label = `Grade ${ass.classId.standard}, Section ${ass.classId.division} - ${ass.subjectId.name}`;
                   const isSelected = activeTab === 'marks' && 
                                      selectedMarksClassId === ass.classId._id && 
                                      selectedSubjectId === ass.subjectId._id;
@@ -692,7 +708,7 @@ const TeacherDashboard = () => {
                         const firstEx = exams.find(e => e.classId?._id?.toString() === ass.classId._id.toString());
                         if (firstEx) {
                           const dateStr = firstEx.date ? new Date(firstEx.date).toISOString().split('T')[0] : '';
-                          setActiveExamGroupKey(`${firstEx.name} (Std ${ass.classId.standard}) - ${dateStr}`);
+                          setActiveExamGroupKey(`${firstEx.name} (Grade ${ass.classId.standard}) - ${dateStr}`);
                         }
                         setIsSidebarOpen(false);
                       }}
@@ -721,7 +737,7 @@ const TeacherDashboard = () => {
                         : 'text-[#6d4c35] hover:bg-[#7a4e2d]/10'
                     }`}
                   >
-                    ⭐ Std {profileData.classTeacherOf.standard}{profileData.classTeacherOf.division} (Class Teacher)
+                    ⭐ Grade {profileData.classTeacherOf.standard}, Section {profileData.classTeacherOf.division} (Class Teacher)
                   </button>
                 )}
               </div>
@@ -776,6 +792,10 @@ const TeacherDashboard = () => {
             <div className="flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
               <h1 className="text-sm md:text-base font-black tracking-tight uppercase">Welcome, {profileData?.name || 'Teacher'}</h1>
             </div>
+            <MessageNotifications
+              onOpenMessages={() => openMessages()}
+              onOpenConversation={openMessages}
+            />
           </div>
         {loading ? (
           <div className="flex h-64 items-center justify-center">
@@ -808,7 +828,7 @@ const TeacherDashboard = () => {
                       <span className="text-[10px] uppercase font-bold tracking-wider text-[#8a6a50]">Designation</span>
                       <h3 className="text-xl font-black text-[#3f2a1d] mt-1">Class Teacher Assignment</h3>
                       <p className="mt-2 text-xs text-[#6d4c35]">
-                        Class teachers manage standard student registers, class notices, and class attendance rosters.
+                        Class teachers manage grade student registers, class notices, and class attendance rosters.
                       </p>
                     </div>
                     <div className="mt-6 pt-4 border-t border-[#d9c5b0]/20">
@@ -816,7 +836,7 @@ const TeacherDashboard = () => {
                         <div className="rounded-2xl bg-[#7a4e2d] p-4 text-center">
                           <p className="text-[10px] uppercase font-bold tracking-widest text-[#d9c5b0]">Assigned Class</p>
                           <h4 className="text-2xl font-black text-[#f7efe4] mt-1">
-                            Std {profileData.classTeacherOf.standard} ({profileData.classTeacherOf.division})
+                            Grade {profileData.classTeacherOf.standard} (Section {profileData.classTeacherOf.division})
                           </h4>
                         </div>
                       ) : (
@@ -832,7 +852,7 @@ const TeacherDashboard = () => {
                     <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#d9c5b0]/20">
                       <div>
                         <h2 className="text-xl font-bold text-[#3f2a1d]">My Teaching Assignments</h2>
-                        <p className="text-xs text-[#7f634e]">Subjects and class divisions assigned to you by school administrators.</p>
+                        <p className="text-xs text-[#7f634e]">Subjects and class sections assigned to you by school administrators.</p>
                       </div>
                       <GraduationCap className="h-5 w-5 text-[#b68c67]" />
                     </div>
@@ -849,9 +869,9 @@ const TeacherDashboard = () => {
                                 <p className="text-[10px] text-[#8a6a50] font-medium">Code: {ass.subjectId.code}</p>
                               </div>
                               <div className="mt-4 pt-2 border-t border-[#d9c5b0]/20 flex justify-between items-center">
-                                <span className="text-[9px] uppercase font-bold tracking-wider text-[#8a6a50]">Division</span>
+                                <span className="text-[9px] uppercase font-bold tracking-wider text-[#8a6a50]">Section</span>
                                 <span className="rounded-lg bg-[#7a4e2d] px-2 py-0.5 text-xs font-black text-[#f7efe4]">
-                                  Std {ass.classId.standard} ({ass.classId.division})
+                                  Grade {ass.classId.standard} (Section {ass.classId.division})
                                 </span>
                               </div>
                             </div>
@@ -867,6 +887,15 @@ const TeacherDashboard = () => {
                 </div>
               </div>
             )}
+
+            {activeTab === 'messages' && (
+              <MessagingPanel
+                messageTarget={messageTarget}
+                contacts={messageContacts}
+              />
+            )}
+
+            {activeTab === 'national-exams' && <NationalExamManager />}
 
             {/* NOTICES TAB */}
             {activeTab === 'notices' && (
@@ -978,7 +1007,7 @@ const TeacherDashboard = () => {
               relevantExams.forEach(ex => {
                 const std = ex.classId?.standard;
                 const dateStr = ex.date ? new Date(ex.date).toISOString().split('T')[0] : '';
-                const groupKey = `${ex.name} (Std ${std}) - ${dateStr}`;
+                const groupKey = `${ex.name} (Grade ${std}) - ${dateStr}`;
                 if (!seenGroupKeys.has(groupKey)) {
                   seenGroupKeys.add(groupKey);
                   examGroups.push({
@@ -1033,7 +1062,7 @@ const TeacherDashboard = () => {
               })();
 
               const activeClassObj = availableClasses.find(c => c._id.toString() === selectedMarksClassId.toString());
-              const activeClassLabel = activeClassObj ? `Class ${activeClassObj.standard}-${activeClassObj.division}` : '';
+              const activeClassLabel = activeClassObj ? `Grade ${activeClassObj.standard} - Section ${activeClassObj.division}` : '';
 
               const activeExamObj = exams.find(ex => ex._id === selectedExamId);
 
@@ -1042,7 +1071,7 @@ const TeacherDashboard = () => {
                   <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex justify-between items-center flex-wrap gap-4">
                     <div>
                       <h2 className="text-xl font-bold text-[#3f2a1d]">Assessment & Marks Directory</h2>
-                      <p className="text-sm text-[#7f634e]">Add/Edit exam scores for classes you teach, or view student report cards if you are a class teacher.</p>
+                      <p className="text-sm text-[#7f634e]">Add/edit exam scores for the grades you teach, or view student reports for your class.</p>
                     </div>
                   </div>
 
@@ -1065,13 +1094,13 @@ const TeacherDashboard = () => {
                               : 'bg-[#faf4ea] text-[#8a6a50] border border-[#d9c5b0] hover:bg-[#f4ecdf]'
                           }`}
                         >
-                          {g.name} (Std {g.standard}) - {g.date ? new Date(g.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : ''}
+                          {g.name} (Grade {g.standard}) - {g.date ? new Date(g.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : ''}
                         </button>
                       ))}
                     </div>
                   ) : (
                     <div className="text-center p-8 text-[#8a6a50] italic border border-dashed border-[#d9c5b0] rounded-2xl bg-[#fffaf3]">
-                      No active exams announced for your standards yet.
+                      No active exams announced for your grades yet.
                     </div>
                   )}
 
@@ -1079,7 +1108,7 @@ const TeacherDashboard = () => {
                     <form onSubmit={handleSaveMarks} className="space-y-6">
                       <div className="grid gap-4 sm:grid-cols-3 rounded-2xl border border-[#d9c5b0] bg-[#fffaf3] p-5 shadow-sm">
                         <div>
-                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Select Class Division *</label>
+                          <label className="block text-xs font-bold text-[#6d4c35] mb-1">Select Section *</label>
                           <select
                             required
                             value={selectedMarksClassId}
@@ -1128,7 +1157,7 @@ const TeacherDashboard = () => {
                                 <p><span className="font-black">Marks:</span> Max {activeExamObj.totalMarks || activeExamObj.maxMarks} / Pass {activeExamObj.passingMarks}</p>
                               </>
                             ) : (
-                              <span className="italic text-[#8a6a50]">No exam link active for standard division</span>
+                              <span className="italic text-[#8a6a50]">No exam is linked to this grade and section.</span>
                             )}
                           </div>
                         </div>
@@ -1316,7 +1345,7 @@ const TeacherDashboard = () => {
                   <div className="space-y-6">
                     <div>
                       <h2 className="text-xl font-bold text-[#3f2a1d]">My Subject Directories</h2>
-                      <p className="text-sm text-[#7f634e]">Select a subject to view assigned standards, divisions, and students.</p>
+                      <p className="text-sm text-[#7f634e]">Select a subject to view assigned grades, sections, and students.</p>
                     </div>
                     {uniqueSubjects.length === 0 ? (
                       <p className="text-sm text-[#8a6a50] italic text-center py-10 bg-[#faf4ea]/30 rounded-3xl border border-[#d9c5b0]/60">
@@ -1333,7 +1362,6 @@ const TeacherDashboard = () => {
                           ).length;
                           return (
                             <div
-                              key={sub._id}
                               onClick={() => {
                                 setSelectedDirSubjectId(sub._id.toString());
                                 setExpandedAllDivsStd(null);
@@ -1451,7 +1479,7 @@ const TeacherDashboard = () => {
                               </div>
                               <div className="flex items-center gap-1.5 text-[#6d4c35]">
                                 <BookOpen className="h-3.5 w-3.5 text-[#b68c67] shrink-0" />
-                                <span>Class: {student.classId?.standard || student.classId}{student.division}</span>
+                                <span>Grade: {student.classId?.standard || student.classId} | Section: {student.division}</span>
                               </div>
                               <div className="flex items-center gap-1.5 text-[#6d4c35]">
                                 <Calendar className="h-3.5 w-3.5 text-[#b68c67] shrink-0" />
@@ -1494,12 +1522,12 @@ const TeacherDashboard = () => {
                         {selectedSubObj?.name}
                       </span>
                       <span>/</span>
-                      <span className="font-bold text-[#3f2a1d] text-xs">Standard {expandedAllDivsStd} Divisions</span>
+                      <span className="font-bold text-[#3f2a1d] text-xs">Grade {expandedAllDivsStd} Sections</span>
                     </div>
 
                     <div>
-                      <h2 className="text-xl font-bold text-[#3f2a1d]">{selectedSubObj?.name} - Standard {expandedAllDivsStd}</h2>
-                      <p className="text-sm text-[#7f634e]">Select a division below to view the class student directory.</p>
+                      <h2 className="text-xl font-bold text-[#3f2a1d]">{selectedSubObj?.name} - Grade {expandedAllDivsStd}</h2>
+                      <p className="text-sm text-[#7f634e]">Select a section below to view the class student directory.</p>
                     </div>
 
                     <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
@@ -1514,12 +1542,12 @@ const TeacherDashboard = () => {
                               <Users className="h-5 w-5" />
                             </div>
                             <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-                              Division {cls.division}
+                              Section {cls.division}
                             </span>
                           </div>
                           <div>
                             <h3 className="text-base font-bold text-[#3f2a1d] group-hover:text-[#7a4e2d] transition">
-                              Std {cls.standard} - {cls.division}
+                              Grade {cls.standard} - Section {cls.division}
                             </h3>
                             <p className="text-xs text-[#8a6a50]">Taught Subject: {selectedSubObj?.name}</p>
                           </div>
@@ -1570,9 +1598,8 @@ const TeacherDashboard = () => {
 
                   <div>
                     <h2 className="text-xl font-bold text-[#3f2a1d]">{selectedSubObj?.name} Classes</h2>
-                    <p className="text-sm text-[#7f634e]">Select a class or standard to view student directories.</p>
+                    <p className="text-sm text-[#7f634e]">Select a class or grade to view student directories.</p>
                   </div>
-
                   <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
                     {sortedStds.map(std => {
                       const teacherCls = stdGroups[std];
@@ -1591,14 +1618,14 @@ const TeacherDashboard = () => {
                                 <GraduationCap className="h-5 w-5" />
                               </div>
                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
-                                All Divisions ({teacherCls.length})
+                                All Sections ({teacherCls.length})
                               </span>
                             </div>
                             <div>
                               <h3 className="text-base font-bold text-[#3f2a1d] group-hover:text-[#7a4e2d] transition">
-                                Standard {std}
+                                Grade {std}
                               </h3>
-                              <p className="text-xs text-[#8a6a50]">Click to view all divisions ({teacherCls.map(c => c.division).join(', ')})</p>
+                              <p className="text-xs text-[#8a6a50]">Click to view all sections ({teacherCls.map(c => c.division).join(', ')})</p>
                             </div>
                           </div>
                         );
@@ -1615,12 +1642,12 @@ const TeacherDashboard = () => {
                                 <Users className="h-5 w-5" />
                               </div>
                               <span className="text-[10px] font-bold text-[#7a4e2d] bg-[#7a4e2d]/10 px-2 py-0.5 rounded-full">
-                                Division {cls.division}
+                                Section {cls.division}
                               </span>
                             </div>
                             <div>
                               <h3 className="text-base font-bold text-[#3f2a1d] group-hover:text-[#7a4e2d] transition">
-                                Std {cls.standard} - {cls.division}
+                                Grade {cls.standard} - Section {cls.division}
                               </h3>
                               <p className="text-xs text-[#8a6a50]">Click to view class directory</p>
                             </div>
@@ -1643,7 +1670,7 @@ const TeacherDashboard = () => {
                     <ClipboardList className="h-5 w-5 text-[#b68c67]" />
                     Assign New Homework
                   </h2>
-                  <p className="text-sm text-[#7f634e]">Assign homework to a specific class standard and division.</p>
+                  <p className="text-sm text-[#7f634e]">Assign homework to a specific grade and section.</p>
 
                   <form onSubmit={handleCreateHomework} className="space-y-4 pt-2">
                     <div>
@@ -1683,7 +1710,7 @@ const TeacherDashboard = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-[#6d4c35] mb-1">Class Standard *</label>
+                        <label className="block text-xs font-bold text-[#6d4c35] mb-1">Grade *</label>
                         <select
                           required
                           disabled={!hwSubjectId}
@@ -1694,7 +1721,7 @@ const TeacherDashboard = () => {
                           }}
                           className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2.5 text-sm outline-none focus:border-[#7a4e2d] focus:bg-white disabled:opacity-50"
                         >
-                          <option value="">-- Select Standard --</option>
+                          <option value="">-- Select Grade --</option>
                           {(() => {
                             const assignedStandards = [];
                             const seenStds = new Set();
@@ -1711,13 +1738,13 @@ const TeacherDashboard = () => {
                                });
                              }
                              return assignedStandards.sort().map(std => (
-                               <option key={std} value={std}>{std.match(/^\d+$/) ? `Standard ${std}` : std}</option>
+                               <option key={std} value={std}>{std.match(/^\d+$/) ? `Grade ${std}` : std}</option>
                              ));
                            })()}
                          </select>
                        </div>
                        <div>
-                         <label className="block text-xs font-bold text-[#6d4c35] mb-1">Class Division/Section *</label>
+                         <label className="block text-xs font-bold text-[#6d4c35] mb-1">Section *</label>
                          <select
                            required
                            disabled={!hwClassStandard}
@@ -1725,7 +1752,7 @@ const TeacherDashboard = () => {
                            onChange={(e) => setHwClassDivision(e.target.value)}
                            className="w-full rounded-xl border border-[#d9c5b0] bg-[#faf4ea] px-3 py-2.5 text-sm outline-none focus:border-[#7a4e2d] focus:bg-white disabled:opacity-50"
                          >
-                           <option value="">-- Select Division --</option>
+                           <option value="">-- Select Section --</option>
                            {(() => {
                              const assignedDivisions = [];
                              if (profileData?.subjectClassAssignments && hwSubjectId && hwClassStandard) {
@@ -1813,7 +1840,7 @@ const TeacherDashboard = () => {
                             <div className="flex justify-between items-start">
                               <div>
                                 <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#7a4e2d]/10 text-[#7a4e2d]">
-                                  Class {hw.classId?.standard || 'N/A'}-{hw.classId?.division || 'N/A'} | {hw.subjectId?.name || 'N/A'}
+                                    Grade {hw.classId?.standard || 'N/A'} | Section {hw.classId?.division || 'N/A'} | {hw.subjectId?.name || 'N/A'}
                                 </span>
                                 <h3 className="font-bold text-[#3f2a1d] mt-2">{hw.title}</h3>
                               </div>
@@ -2123,7 +2150,7 @@ const TeacherDashboard = () => {
                       <div><span className="font-semibold block text-xs text-[#8a6a50]">Experience:</span>{profileData.experience ? `${profileData.experience} Years` : 'N/A'}</div>
                       <div><span className="font-semibold block text-xs text-[#8a6a50]">Joining Date:</span>{profileData.joiningDate ? profileData.joiningDate.split('T')[0] : 'N/A'}</div>
                       <div><span className="font-semibold block text-xs text-[#8a6a50]">Previous School:</span>{profileData.previousSchool || 'N/A'}</div>
-                      <div className="col-span-2"><span className="font-semibold block text-xs text-[#8a6a50]">Class Teacher of:</span>{profileData.classTeacherOf ? `Class ${profileData.classTeacherOf.standard || 'N/A'} (${profileData.classTeacherOf.division || 'N/A'})` : 'No Class Assigned'}</div>
+                      <div className="col-span-2"><span className="font-semibold block text-xs text-[#8a6a50]">Class Teacher of:</span>{profileData.classTeacherOf ? `Grade ${profileData.classTeacherOf.standard || 'N/A'} (Section ${profileData.classTeacherOf.division || 'N/A'})` : 'No Class Assigned'}</div>
                     </div>
                   </div>
 
@@ -2378,7 +2405,7 @@ const TeacherDashboard = () => {
                     );
                     if (found) {
                       match = found;
-                      className = t.classId ? `Std ${t.classId.standard} (${t.classId.division})` : 'Class';
+                      className = t.classId ? `Grade ${t.classId.standard} (Section ${t.classId.division})` : 'Class';
                       break;
                     }
                   }

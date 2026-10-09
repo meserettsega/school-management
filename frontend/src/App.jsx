@@ -11,6 +11,7 @@ import SchoolRegistration from './pages/SchoolRegistration';
 import AdminDashboard from './pages/admin/Dashboard';
 import StudentDashboard from './pages/student/Dashboard';
 import TeacherDashboard from './pages/teacher/Dashboard';
+import FamilyDashboard from './pages/family/Dashboard';
 
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
@@ -101,6 +102,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRole="student">
                     <StudentDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/family/*"
+                element={
+                  <ProtectedRoute requiredRole="family">
+                    <FamilyDashboard />
                   </ProtectedRoute>
                 }
               />

@@ -6,6 +6,9 @@ const { authenticate } = require('../middleware/auth');
 // Send Message
 router.post('/', authenticate, messageController.sendMessage);
 
+// Contacts available to the authenticated user's role in their school
+router.get('/contacts', authenticate, messageController.getContacts);
+
 // Get Inbox
 router.get('/inbox', authenticate, messageController.getInbox);
 
