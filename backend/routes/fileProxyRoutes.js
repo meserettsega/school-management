@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const https = require('https');
 const http = require('http');
+const path = require('path');
 const { authenticate } = require('../middleware/auth');
 
 /**
@@ -51,8 +52,13 @@ router.get('/view', authenticate, (req, res) => {
       res.setHeader('Content-Length', fileRes.headers['content-length']);
     }
 
-    // Inline display (browser opens it in-tab), not download
-    res.setHeader('Content-Disposition', 'inline');
+    if (req.query.download === 'true') {
+      const requestedName = String(req.query.filename || path.basename(parsedUrl.pathname) || 'school-resource');
+      const safeName = path.basename(requestedName).replace(/["\\\r\n]/g, '_');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName || 'school-resource'}"`);
+    } else {
+      res.setHeader('Content-Disposition', 'inline');
+    }
 
     fileRes.pipe(res);
   }).on('error', (err) => {

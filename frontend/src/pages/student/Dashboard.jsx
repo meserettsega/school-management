@@ -7,6 +7,7 @@ import {
 import { Toaster, toast } from 'react-hot-toast';
 import apiClient from '../../utils/apiClient';
 import { openProxiedFile } from '../../utils/fileProxy';
+import NationalExamCenter from '../../components/NationalExamCenter';
 
 const StudentDashboard = () => {
   const [profileData, setProfileData] = useState(null);
@@ -19,7 +20,7 @@ const StudentDashboard = () => {
   const [uploadingHomeworkId, setUploadingHomeworkId] = useState(null);
   const getTabFromHash = () => {
     const hash = window.location.hash.replace('#/', '');
-    const validTabs = ['dashboard', 'homework', 'attendance', 'notices', 'timetable', 'marks', 'fees', 'profile', 'grievances', 'security'];
+    const validTabs = ['dashboard', 'homework', 'attendance', 'notices', 'timetable', 'marks', 'fees', 'national-exams', 'profile', 'grievances', 'security'];
     if (hash && validTabs.includes(hash)) {
       return hash;
     }
@@ -340,6 +341,7 @@ const StudentDashboard = () => {
                   ['attendance', 'Roster & Attendance', CheckCircle],
                   ['notices', 'Notice Board', Bell],
                   ['timetable', 'My Class Timetable', Calendar],
+                  ['national-exams', 'National Exam Practice', ClipboardList],
                 ].map(([id, label, Icon]) => (
                   <button
                     key={id}
@@ -466,6 +468,8 @@ const StudentDashboard = () => {
           </div>
 
         {/* TAB 1: OVERVIEW */}
+        {activeSubTab === 'national-exams' && <NationalExamCenter />}
+
         {activeSubTab === 'dashboard' && (
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -927,7 +931,7 @@ const StudentDashboard = () => {
                 <p className="text-[#8a6a50] text-sm font-semibold">Student ID: {profileData._id} | Roll: {profileData.rollNumber || 'N/A'}</p>
                 <div className="flex flex-wrap justify-center md:justify-start gap-2 mt-2">
                   <span className="bg-[#7a4e2d]/10 text-[#7a4e2d] text-xs font-bold px-3 py-1 rounded-full">
-                    Class: {profileData.classId?.standard || 'N/A'} ({profileData.division || 'N/A'})
+                    Grade: {profileData.classId?.standard || 'N/A'} | Section: {profileData.division || 'N/A'}
                   </span>
                   <span className="bg-sky-500/10 text-sky-700 text-xs font-bold px-3 py-1 rounded-full font-mono">
                     Admission No: {profileData.admissionNumber || 'N/A'}
@@ -1352,7 +1356,7 @@ const StudentDashboard = () => {
           };
 
           const classNameStr = profileData?.classId
-            ? `Std ${profileData.classId.standard} (${profileData.classId.division})`
+            ? `Grade ${profileData.classId.standard} (Section ${profileData.classId.division})`
             : 'My Class';
 
           return (
@@ -1440,7 +1444,7 @@ const StudentDashboard = () => {
                 </div>
               ) : (
                 <div className="text-center py-8 text-[#8a6a50] italic text-sm">
-                  No lectures are currently scheduled for your class division.
+                  No lectures are currently scheduled for your class section.
                 </div>
               )}
             </div>
@@ -1552,7 +1556,7 @@ const StudentDashboard = () => {
               </div>
             ) : (
               <div className="text-center py-12 text-[#8a6a50] italic border border-dashed border-[#d9c5b0] rounded-[2rem] bg-[#fffaf3]">
-                No fee structure has been configured for your standard by the admin.
+                No fee structure has been configured for your grade by the admin.
               </div>
             )}
           </div>

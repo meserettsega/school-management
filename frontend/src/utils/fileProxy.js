@@ -31,3 +31,14 @@ export function openProxiedFile(rawUrl) {
   const proxied = `${API_BASE}/files/view?url=${encodeURIComponent(rawUrl)}&token=${encodeURIComponent(token)}`;
   window.open(proxied, '_blank', 'noopener,noreferrer');
 }
+
+export function downloadProxiedFile(rawUrl, filename = 'school-resource') {
+  if (!rawUrl) return;
+  const token = localStorage.getItem('accessToken') || '';
+  const proxied = new URL(`${API_BASE}/files/view`);
+  proxied.searchParams.set('url', rawUrl);
+  proxied.searchParams.set('token', token);
+  proxied.searchParams.set('download', 'true');
+  proxied.searchParams.set('filename', filename);
+  window.location.assign(proxied.toString());
+}

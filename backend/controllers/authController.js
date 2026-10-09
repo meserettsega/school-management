@@ -2,6 +2,7 @@ const User = require('../models/User');
 const School = require('../models/School');
 const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
+const Family = require('../models/Family');
 const mongoose = require('mongoose');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
@@ -21,6 +22,7 @@ const getUserModelByRole = (role) => {
   if (role === 'admin') return User;
   if (role === 'teacher') return Teacher;
   if (role === 'student') return Student;
+  if (role === 'family') return Family;
   return User;
 };
 
@@ -34,6 +36,7 @@ const findUserByIdAndRole = async (id, role) => {
   let user = await User.findById(id);
   if (!user) user = await Teacher.findById(id);
   if (!user) user = await Student.findById(id);
+  if (!user) user = await Family.findById(id);
   return user;
 };
 
@@ -196,7 +199,7 @@ exports.login = async (req, res) => {
     }
 
     // Find school by code
-    const school = await School.findOne({ code: schoolCode });
+    const school = await School.findOne({ code: schoolCode.trim() }).collation({ locale: 'en', strength: 2 });
     if (!school) {
       return res.status(404).json({ message: 'School does not exist' });
     }
@@ -209,6 +212,9 @@ exports.login = async (req, res) => {
     }
     if (!user) {
       user = await Student.findOne({ email, schoolId: school._id }).select('+password');
+    }
+    if (!user) {
+      user = await Family.findOne({ email, schoolId: school._id }).select('+password');
     }
 
     if (!user) {
@@ -317,6 +323,8 @@ exports.getProfile = async (req, res) => {
           path: 'subjectClassAssignments.classId',
           select: 'standard division'
         });
+    } else if (req.user.role === 'family') {
+      query = query.populate('children.studentId', 'name classId division admissionNumber rollNumber');
     }
 
     const user = await query.select('-password -refreshTokens');
