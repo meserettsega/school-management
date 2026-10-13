@@ -20,6 +20,7 @@ import {
 import apiClient from '../../utils/apiClient';
 import MessagingPanel from '../../components/MessagingPanel';
 import MessageNotifications from '../../components/MessageNotifications';
+import DashboardAnalytics from '../../components/DashboardAnalytics';
 
 const getFamilyChildId = (child) => String(child?.studentId?._id || child?.studentId || '');
 const attendanceStatusStyles = {
@@ -174,6 +175,17 @@ const FamilyDashboard = () => {
     { label: 'Notifications', value: 'Active', icon: Bell },
   ];
 
+  const childrenByClass = Object.entries((family?.children || []).reduce((counts, child) => {
+    const className = child.studentClass || 'Unassigned';
+    counts[className] = (counts[className] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+  const childrenByRelation = Object.entries((family?.children || []).reduce((counts, child) => {
+    const relation = child.relation || 'Other';
+    counts[relation] = (counts[relation] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+
   const navGroups = [
     {
       title: 'Overview',
@@ -209,7 +221,7 @@ const FamilyDashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f4ecdf] text-[#3f2a1d]">
+      <div className="dashboard-shell flex min-h-screen items-center justify-center bg-[#f4ecdf] text-[#3f2a1d]">
         <div className="text-center">
           <div className="inline-block h-12 w-12 animate-spin rounded-full border-b-2 border-[#7a4e2d]" />
           <p className="mt-4 font-semibold text-[#7a4e2d]">Loading family profile...</p>
@@ -220,7 +232,7 @@ const FamilyDashboard = () => {
 
   if (!family) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f4ecdf] text-[#3f2a1d]">
+      <div className="dashboard-shell flex min-h-screen items-center justify-center bg-[#f4ecdf] text-[#3f2a1d]">
         <div className="rounded-3xl border border-[#d9c5b0] bg-[#fffaf3] p-8 text-center shadow-sm">
           <p className="text-xl font-black">Family profile not found</p>
           <p className="mt-2 text-sm text-[#8a6a50]">Please contact the school admin to link your children.</p>
@@ -230,7 +242,7 @@ const FamilyDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
+    <div className="dashboard-shell min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#fffaf3] border-r border-[#d9c5b0] transform transition-transform duration-300 ease-in-out p-5 flex flex-col justify-between shadow-2xl md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:-ml-64'} shrink-0`}>
         <div className="space-y-6 flex-1 overflow-y-auto pr-1">
           <div className="flex items-center justify-between border-b border-[#d9c5b0]/30 pb-4">
@@ -285,7 +297,7 @@ const FamilyDashboard = () => {
               <Menu className="h-5 w-5" />
             </button>
 
-            <div className="flex flex-1 flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-[#f5d9b3] to-[#f7efe4] p-3.5 shadow-sm">
+            <div className="dashboard-header flex flex-1 flex-wrap items-center justify-between gap-4 rounded-2xl bg-gradient-to-r from-[#f5d9b3] to-[#f7efe4] p-3.5 shadow-sm">
               <h1 className="text-sm font-black uppercase tracking-tight text-[#3f2a1d] md:text-base">Welcome, {family.name}</h1>
               <div className="rounded-full bg-[#7a4e2d] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[#f7efe4]">
                 Family ID: {family.familyId}
@@ -314,6 +326,15 @@ const FamilyDashboard = () => {
                   </div>
                 ))}
               </div>
+
+              <DashboardAnalytics
+                title="Family analytics"
+                description="A quick overview of linked students by class and relationship."
+                barTitle="Linked children by class"
+                barData={childrenByClass}
+                distributionTitle="Children by relationship"
+                distributionData={childrenByRelation}
+              />
 
               <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
                 <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">

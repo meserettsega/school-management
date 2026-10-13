@@ -10,6 +10,7 @@ import { openProxiedFile } from '../../utils/fileProxy';
 import MessagingPanel from '../../components/MessagingPanel';
 import MessageNotifications from '../../components/MessageNotifications';
 import NationalExamManager from '../../components/NationalExamManager';
+import DashboardAnalytics from '../../components/DashboardAnalytics';
 
 const TeacherDashboard = () => {
   const getTabFromHash = () => {
@@ -586,15 +587,40 @@ const TeacherDashboard = () => {
     s.registrationNumber?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const myAssignedHomework = assignedHomework.filter(homework => {
+    const teacherId = homework.teacherId?._id || homework.teacherId;
+    return Boolean(profileData?._id && teacherId && String(teacherId) === String(profileData._id));
+  });
+  const outstandingSubmissions = myAssignedHomework.reduce(
+    (total, homework) => total + Math.max(0, Number(homework.totalStudents || 0) - Number(homework.submittedCount || 0)),
+    0
+  );
+
   const stats = [
     { icon: Users, title: 'Total Students', value: students.length, tone: 'bg-sky-500/10 text-sky-700' },
     { icon: BookOpen, title: 'Classes Assigned', value: profileData?.subjectClassAssignments ? [...new Set(profileData.subjectClassAssignments.map(ass => ass.classId?._id || ass.classId).filter(Boolean))].length : 0, tone: 'bg-emerald-500/10 text-emerald-700' },
-    { icon: CheckCircle, title: 'Pending Homework', value: '15', tone: 'bg-amber-500/10 text-amber-700' },
-    { icon: AlertCircle, title: 'Ungraded Submissions', value: '8', tone: 'bg-rose-500/10 text-rose-700' },
+    { icon: CheckCircle, title: 'Active Homework', value: myAssignedHomework.length, tone: 'bg-amber-500/10 text-amber-700' },
+    { icon: AlertCircle, title: 'Outstanding Submissions', value: outstandingSubmissions, tone: 'bg-rose-500/10 text-rose-700' },
   ];
 
+  const classById = new Map(allClasses.map(classItem => [String(classItem._id), classItem]));
+  const studentsBySection = Object.entries(students.reduce((counts, student) => {
+    const classId = student.classId?._id || student.classId;
+    const classItem = student.classId?.standard ? student.classId : classById.get(String(classId));
+    const section = classItem
+      ? `Grade ${classItem.standard}${classItem.division ? ` - ${classItem.division}` : ''}`
+      : 'Unassigned';
+    counts[section] = (counts[section] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+  const assignmentsBySubject = Object.entries((profileData?.subjectClassAssignments || []).reduce((counts, assignment) => {
+    const subjectName = assignment.subjectId?.name || 'Unassigned';
+    counts[subjectName] = (counts[subjectName] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+
   return (
-    <div className="min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
+    <div className="dashboard-shell min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
       <Toaster position="top-right" />
       
       {/* Sidebar Navigation */}
@@ -789,7 +815,7 @@ const TeacherDashboard = () => {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
+            <div className="dashboard-header flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
               <h1 className="text-sm md:text-base font-black tracking-tight uppercase">Welcome, {profileData?.name || 'Teacher'}</h1>
             </div>
             <MessageNotifications
@@ -820,6 +846,15 @@ const TeacherDashboard = () => {
                     );
                   })}
                 </div>
+
+                <DashboardAnalytics
+                  title="Teaching analytics"
+                  description="An overview of your student roster and subject-class assignments."
+                  barTitle="Students by section"
+                  barData={studentsBySection}
+                  distributionTitle="Assigned classes by subject"
+                  distributionData={assignmentsBySubject}
+                />
 
                 <div className="grid gap-6 md:grid-cols-3">
                   {/* Class Teacher Profile Block */}

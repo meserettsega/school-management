@@ -1,21 +1,42 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, BookOpen, Building2, CheckCircle, Eye, EyeOff, Loader, Mail, Lock, MapPin, Phone, Users, GraduationCap } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Building2,
+  Check,
+  CheckCircle,
+  Eye,
+  EyeOff,
+  Loader,
+  Lock,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import apiClient from '../utils/apiClient';
+
+const passwordRequirements = [
+  { label: 'At least 6 characters', test: (value) => value.length >= 6 },
+  { label: 'One uppercase letter', test: (value) => /[A-Z]/.test(value) },
+  { label: 'One number', test: (value) => /[0-9]/.test(value) },
+  { label: 'One special character', test: (value) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(value) },
+];
 
 export default function SchoolRegistration() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [role, setRole] = useState('admin');
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     schoolName: '',
     schoolCode: '',
-    schoolCodeForMember: '',
     email: '',
-    name: '',
     password: '',
     confirmPassword: '',
     adminName: '',
@@ -25,28 +46,41 @@ export default function SchoolRegistration() {
     state: '',
   });
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({
+      ...previous,
+      [name]: name === 'schoolCode' ? value.toUpperCase() : value,
     }));
   };
 
-  const validateForm = () => {
-    if (!formData.email.includes('@')) {
-      toast.error('Please enter a valid email');
+  const validateSchoolDetails = () => {
+    if (!formData.schoolName.trim()) {
+      toast.error('Enter your school name to continue');
       return false;
     }
 
-    const password = formData.password || '';
-    const hasMinLength = password.length >= 6;
-    const hasCapital = /[A-Z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password);
+    if (!formData.schoolCode.trim()) {
+      toast.error('Choose a school code to continue');
+      return false;
+    }
 
-    if (!hasMinLength || !hasCapital || !hasNumber || !hasSpecial) {
-      toast.error('Password must be at least 6 characters, contain 1 capital letter, 1 number, and 1 special character');
+    return true;
+  };
+
+  const validateAccountDetails = () => {
+    if (!formData.adminName.trim()) {
+      toast.error('Enter the administrator’s name');
+      return false;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      toast.error('Enter a valid email address');
+      return false;
+    }
+
+    if (!passwordRequirements.every(({ test }) => test(formData.password))) {
+      toast.error('Your password must meet all four requirements');
       return false;
     }
 
@@ -58,87 +92,45 @@ export default function SchoolRegistration() {
     return true;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    if (!validateForm()) return;
+    if (loading || registrationComplete) return;
+
+    if (currentStep === 1) {
+      if (validateSchoolDetails()) setCurrentStep(2);
+      return;
+    }
+
+    if (!validateSchoolDetails() || !validateAccountDetails()) return;
 
     setLoading(true);
 
     try {
-      if (role === 'admin') {
-        if (!formData.schoolName.trim()) {
-          toast.error('School name is required');
-          setLoading(false);
-          return;
-        }
+      await apiClient.post('/schools', {
+        name: formData.schoolName.trim(),
+        code: formData.schoolCode.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        address: {
+          street: formData.address.trim(),
+          city: formData.city.trim(),
+          state: formData.state.trim(),
+        },
+        principalName: 'Principal',
+        principalEmail: formData.email.trim(),
+        adminName: formData.adminName.trim(),
+        adminEmail: formData.email.trim(),
+        adminPassword: formData.password,
+      });
 
-        if (!formData.schoolCode.trim()) {
-          toast.error('School code is required');
-          setLoading(false);
-          return;
-        }
-
-        if (!formData.adminName.trim()) {
-          toast.error('Admin name is required');
-          setLoading(false);
-          return;
-        }
-
-        await apiClient.post('/schools', {
-          name: formData.schoolName,
-          code: formData.schoolCode,
-          email: formData.email,
-          phone: formData.phone,
-          address: {
-            street: formData.address,
-            city: formData.city,
-            state: formData.state,
-          },
-          principalName: 'Principal',
-          principalEmail: formData.email,
-          adminName: formData.adminName,
-          adminEmail: formData.email,
-          adminPassword: formData.password,
-        });
-
-        toast.success('School registered successfully!');
-      } else {
-        if (!formData.schoolName.trim()) {
-          toast.error('School name is required');
-          setLoading(false);
-          return;
-        }
-
-        if (!formData.schoolCodeForMember.trim()) {
-          toast.error('School code is required');
-          setLoading(false);
-          return;
-        }
-
-        if (!formData.name.trim()) {
-          toast.error('Name is required');
-          setLoading(false);
-          return;
-        }
-
-        await apiClient.post('/auth/register', {
-          role,
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          phone: formData.phone,
-          schoolCode: formData.schoolCodeForMember,
-        });
-
-        toast.success(`${role} registered successfully!`);
-      }
-
+      toast.success('School registered successfully!');
+      setRegistrationComplete(true);
       setTimeout(() => {
         navigate('/login', {
           state: {
-            schoolCode: role === 'admin' ? formData.schoolCode : formData.schoolCodeForMember,
-            email: formData.email,
+            schoolCode: formData.schoolCode.trim(),
+            email: formData.email.trim(),
           },
         });
       }, 1500);
@@ -150,296 +142,366 @@ export default function SchoolRegistration() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4ecdf] px-4 py-10 text-[#3f2a1d] sm:px-6 lg:px-8">
+    <div className="public-page min-h-screen bg-[#f4ecdf] px-4 py-8 text-[#3f2a1d] sm:px-6 lg:px-8">
       <Toaster position="top-right" />
 
-      <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] max-w-7xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-        <div className="rounded-[2rem] border border-[#d9c5b0] bg-gradient-hero p-8 shadow-lg shadow-[#b68c67]/15 lg:p-10">
-          <div className="mb-6 flex items-center gap-3">
+      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
+        <aside className="registration-brand-panel order-2 rounded-[2rem] p-7 shadow-xl sm:p-9 lg:sticky lg:top-8 lg:order-1">
+          <Link
+            to="/"
+            className="mb-8 inline-flex items-center gap-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f2c343] focus:ring-offset-2 focus:ring-offset-[#203a59]"
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#7a4e2d] text-[#f7efe4]">
-              <BookOpen className="h-6 w-6" />
+              <BookOpen className="h-6 w-6" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-lg font-extrabold text-[#3f2a1d]">SchoolHub</p>
-              <p className="text-sm text-[#7f634e]">Register a new school</p>
+              <p className="text-lg font-extrabold text-white">SchoolHub</p>
+              <p className="text-sm text-slate-300">School management platform</p>
             </div>
-          </div>
+          </Link>
 
-          <h1 className="max-w-xl text-5xl font-black leading-tight tracking-tight text-[#3f2a1d] lg:text-6xl">
-            Create one school account and keep the whole system under one code.
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#f2c343]">Get started</p>
+          <h1 className="mt-3 max-w-xl text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl">
+            Set up your school workspace.
           </h1>
-          <p className="mt-5 max-w-xl text-lg leading-8 text-[#6d4c35]">
-            The admin account, school profile and access code are created together so the login flow stays simple later.
+          <p className="mt-4 max-w-xl text-base leading-7 text-slate-200">
+            Add your school details and create the administrator account. You can manage teachers, students and families after signing in.
           </p>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          <div className="mt-8 space-y-3">
             {[
-              ['School profile', 'Name, code, phone and location', Building2],
-              ['Admin access', 'Email and password for login', Users],
-              ['Communication', 'Notices and messages later', Mail],
-              ['Records', 'Timetable, homework and marks', CheckCircle],
+              ['School profile', 'Create a unique school code for sign-in.', Building2],
+              ['Administrator account', 'Use one email and password to manage your school.', Users],
+              ['Ready for your team', 'Add educators and learners from your dashboard.', CheckCircle],
             ].map(([title, description, Icon]) => (
-              <div key={title} className="rounded-3xl border border-[#d9c5b0] bg-[#fffaf3] p-4 backdrop-blur">
-                <Icon className="h-5 w-5 text-[#7a4e2d]" />
-                <p className="mt-3 font-semibold text-[#3f2a1d]">{title}</p>
-                <p className="mt-1 text-sm text-[#6d4c35]">{description}</p>
+              <div key={title} className="registration-brand-card flex items-start gap-3 rounded-2xl p-4">
+                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#f2c343]" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold text-white">{title}</p>
+                  <p className="mt-1 text-sm leading-5 text-slate-200">{description}</p>
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-8 rounded-3xl border border-[#d9c5b0] bg-[#f7efe4] p-4 text-sm text-[#6d4c35]">
-            <p className="font-semibold text-[#3f2a1d]">School registration flow</p>
-            <p className="mt-2 leading-6">Fill the form once, create the school, and then login with the same school code for role-based access.</p>
+          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm leading-6 text-slate-200">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#f2c343]" aria-hidden="true" />
+            <p>Your school code and administrator email will be ready on the sign-in page after registration.</p>
           </div>
-        </div>
+        </aside>
 
-        <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 text-[#3f2a1d] shadow-lg shadow-[#b68c67]/15 sm:p-8">
-          <div className="mb-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#8a6a50]">New account</p>
-            <h2 className="mt-2 text-3xl font-black tracking-tight text-[#3f2a1d]">Register your School</h2>
-            <p className="mt-2 text-[#6d4c35]">Create an admin account and register your school. Teachers and students are added by the admin from the dashboard.</p>
+        <main className="order-1 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-900/5 sm:p-8 lg:order-2">
+          <div className="mb-7">
+            <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#2c4d73]">School registration</p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight text-[#172536]">Create your account</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Complete these two short steps to set up your school.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {role === 'admin' ? (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">School Name *</label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
-                    <input
-                      type="text"
-                      name="schoolName"
-                      value={formData.schoolName}
-                      onChange={handleChange}
-                      placeholder="e.g. ABC Public School"
-                      className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-4 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">School Code *</label>
-                  <input
-                    type="text"
-                    name="schoolCode"
-                    value={formData.schoolCode}
-                    onChange={handleChange}
-                    placeholder="e.g. SCHOOL001"
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                  <p className="mt-1 text-xs text-[#8a6a50]">Used for login later.</p>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Admin Name *</label>
-                  <input
-                    type="text"
-                    name="adminName"
-                    value={formData.adminName}
-                    onChange={handleChange}
-                    placeholder="e.g. Mr. Principal"
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">School Name *</label>
-                  <input
-                    type="text"
-                    name="schoolName"
-                    value={formData.schoolName}
-                    onChange={handleChange}
-                    placeholder="e.g. ABC Public School"
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">School Code *</label>
-                  <input
-                    type="text"
-                    name="schoolCodeForMember"
-                    value={formData.schoolCodeForMember}
-                    onChange={handleChange}
-                    placeholder="e.g. SCHOOL001"
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Full Name *</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder={role === 'teacher' ? 'e.g. Mr. Sharma' : 'e.g. Riya Patel'}
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Email Address *</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder={role === 'admin' ? 'admin@school.com' : 'name@school.com'}
-                  className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-4 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                />
-              </div>
+          <div className="mb-8 grid grid-cols-[1fr_auto_1fr] items-center" aria-label="Registration progress">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-[#2c4d73] bg-[#2c4d73] text-sm font-bold text-white">
+                {currentStep === 2 ? <Check className="h-5 w-5" aria-hidden="true" /> : '1'}
+              </span>
+              <span>
+                <span className="block text-xs font-semibold uppercase tracking-wide text-[#2c4d73]">Step 1</span>
+                <span className="block text-sm font-semibold text-[#172536]">School profile</span>
+              </span>
             </div>
+            <span className={`h-0.5 w-8 sm:w-14 ${currentStep === 2 ? 'bg-[#2c4d73]' : 'bg-slate-200'}`} aria-hidden="true" />
+            <div className="flex items-center gap-3">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${currentStep === 2 ? 'border-[#2c4d73] bg-[#2c4d73] text-white' : 'border-slate-300 bg-white text-slate-500'}`}>2</span>
+              <span>
+                <span className={`block text-xs font-semibold uppercase tracking-wide ${currentStep === 2 ? 'text-[#2c4d73]' : 'text-slate-500'}`}>Step 2</span>
+                <span className={`block text-sm font-semibold ${currentStep === 2 ? 'text-[#172536]' : 'text-slate-500'}`}>Admin account</span>
+              </span>
+            </div>
+          </div>
 
-            {role === 'admin' && (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Phone Number</label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="+91 9876543210"
-                      className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-4 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                    />
-                  </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {currentStep === 1 ? (
+              <section aria-labelledby="school-details-heading">
+                <div className="mb-5">
+                  <h3 id="school-details-heading" className="text-xl font-bold text-[#172536]">Tell us about your school</h3>
+                  <p className="mt-1 text-sm text-slate-600">Start with the details your team will recognize.</p>
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Address</label>
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleChange}
-                    placeholder="Street or area name"
-                    className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-4">
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">City</label>
+                    <label htmlFor="schoolName" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      School name <span className="text-rose-600">*</span>
+                    </label>
                     <div className="relative">
-                      <MapPin className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
+                      <Building2 className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" aria-hidden="true" />
                       <input
+                        id="schoolName"
                         type="text"
-                        name="city"
-                        value={formData.city}
+                        name="schoolName"
+                        value={formData.schoolName}
                         onChange={handleChange}
-                        placeholder="City"
-                        className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-4 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
+                        placeholder="e.g. Green Valley Public School"
+                        autoComplete="organization"
+                        required
+                        autoFocus
+                        className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
                       />
                     </div>
                   </div>
+
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">State</label>
+                    <label htmlFor="schoolCode" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      School code <span className="text-rose-600">*</span>
+                    </label>
                     <input
+                      id="schoolCode"
                       type="text"
-                      name="state"
-                      value={formData.state}
+                      name="schoolCode"
+                      value={formData.schoolCode}
                       onChange={handleChange}
-                      placeholder="State"
-                      className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] px-4 py-3 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
+                      placeholder="e.g. GREENVALLEY"
+                      autoComplete="off"
+                      required
+                      aria-describedby="school-code-help"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 uppercase text-[#172536] outline-none transition placeholder:normal-case placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                    />
+                    <p id="school-code-help" className="mt-1.5 text-xs leading-5 text-slate-500">
+                      You’ll enter this code when you sign in. It’s converted to uppercase automatically.
+                    </p>
+                  </div>
+
+                  <div className="border-t border-slate-200 pt-4">
+                    <p className="mb-3 text-sm font-semibold text-slate-700">
+                      Contact details <span className="font-normal text-slate-500">(optional)</span>
+                    </p>
+                    <div className="space-y-4">
+                      <div>
+                        <label htmlFor="phone" className="mb-1.5 block text-sm font-medium text-slate-700">School phone</label>
+                        <div className="relative">
+                          <Phone className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" aria-hidden="true" />
+                          <input
+                            id="phone"
+                            type="tel"
+                            name="phone"
+                            value={formData.phone}
+                            onChange={handleChange}
+                            placeholder="Include country or area code"
+                            autoComplete="tel"
+                            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label htmlFor="address" className="mb-1.5 block text-sm font-medium text-slate-700">Street address</label>
+                        <input
+                          id="address"
+                          type="text"
+                          name="address"
+                          value={formData.address}
+                          onChange={handleChange}
+                          placeholder="Street or area"
+                          autoComplete="street-address"
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                        />
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label htmlFor="city" className="mb-1.5 block text-sm font-medium text-slate-700">City</label>
+                          <input
+                            id="city"
+                            type="text"
+                            name="city"
+                            value={formData.city}
+                            onChange={handleChange}
+                            placeholder="City"
+                            autoComplete="address-level2"
+                            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="state" className="mb-1.5 block text-sm font-medium text-slate-700">State / region</label>
+                          <input
+                            id="state"
+                            type="text"
+                            name="state"
+                            value={formData.state}
+                            onChange={handleChange}
+                            placeholder="State or region"
+                            autoComplete="address-level1"
+                            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2c4d73] px-5 py-3.5 font-semibold text-white transition hover:bg-[#203a59] focus:outline-none focus:ring-4 focus:ring-[#2c4d73]/20">
+                  Continue to administrator details
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </section>
+            ) : (
+              <section aria-labelledby="admin-details-heading">
+                <div className="mb-5">
+                  <h3 id="admin-details-heading" className="text-xl font-bold text-[#172536]">Set up administrator access</h3>
+                  <p className="mt-1 text-sm text-slate-600">These are the credentials you’ll use to manage your school.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="adminName" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Administrator’s full name <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      id="adminName"
+                      type="text"
+                      name="adminName"
+                      value={formData.adminName}
+                      onChange={handleChange}
+                      placeholder="e.g. Jordan Lee"
+                      autoComplete="name"
+                      required
+                      autoFocus
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
                     />
                   </div>
+
+                  <div>
+                    <label htmlFor="email" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Administrator email <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" aria-hidden="true" />
+                      <input
+                        id="email"
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="you@school.com"
+                        autoComplete="email"
+                        required
+                        aria-describedby="email-help"
+                        className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-4 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                      />
+                    </div>
+                    <p id="email-help" className="mt-1.5 text-xs leading-5 text-slate-500">
+                      Use an email address you can access; it will be prefilled at sign-in.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="password" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Create password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" aria-hidden="true" />
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        placeholder="Create a strong password"
+                        autoComplete="new-password"
+                        required
+                        aria-describedby="password-help"
+                        className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 top-3.5 rounded text-slate-500 transition hover:text-[#2c4d73] focus:outline-none focus:ring-2 focus:ring-[#2c4d73]"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                      </button>
+                    </div>
+                    <div id="password-help" className="mt-3 grid gap-2 sm:grid-cols-2" aria-live="polite">
+                      {passwordRequirements.map(({ label, test }) => {
+                        const passed = test(formData.password);
+                        return (
+                          <div key={label} className={`flex items-center gap-2 text-xs ${passed ? 'font-medium text-emerald-700' : 'text-slate-500'}`}>
+                            {passed ? <CheckCircle className="h-4 w-4" aria-hidden="true" /> : <span className="h-4 w-4 rounded-full border border-slate-300" aria-hidden="true" />}
+                            {label}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="confirmPassword" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                      Confirm password <span className="text-rose-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" aria-hidden="true" />
+                      <input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        placeholder="Enter your password again"
+                        autoComplete="new-password"
+                        required
+                        className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-12 text-[#172536] outline-none transition placeholder:text-slate-400 focus:border-[#2c4d73] focus:ring-4 focus:ring-[#2c4d73]/10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                        className="absolute right-3 top-3.5 rounded text-slate-500 transition hover:text-[#2c4d73] focus:outline-none focus:ring-2 focus:ring-[#2c4d73]"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                      </button>
+                    </div>
+                    {formData.confirmPassword && (
+                      <p className={`mt-1.5 text-xs ${formData.password === formData.confirmPassword ? 'text-emerald-700' : 'text-rose-600'}`} aria-live="polite">
+                        {formData.password === formData.confirmPassword ? 'Passwords match' : 'Passwords do not match yet'}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </>
+              </section>
             )}
 
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Password *</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="At least 6 characters"
-                  className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-12 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-[#b68c67] transition hover:text-[#7a4e2d]">
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            {currentStep === 2 && (
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-between">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  disabled={loading || registrationComplete}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200 disabled:opacity-50"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+                  Back to school details
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || registrationComplete}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2c4d73] px-5 py-3 font-semibold text-white transition hover:bg-[#203a59] focus:outline-none focus:ring-4 focus:ring-[#2c4d73]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading || registrationComplete ? (
+                    <>
+                      <Loader className="h-5 w-5 animate-spin" aria-hidden="true" />
+                      {registrationComplete ? 'Workspace created, redirecting...' : 'Creating workspace...'}
+                    </>
+                  ) : (
+                    <>
+                      Create school workspace
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </>
+                  )}
                 </button>
               </div>
-              <div className="mt-2 space-y-1 text-xs">
-                <p className="font-semibold text-[#6d4c35]">Password requirements:</p>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block h-2 w-2 rounded-full ${(formData.password || '').length >= 6 ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className={(formData.password || '').length >= 6 ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>Min 6 characters</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block h-2 w-2 rounded-full ${/[A-Z]/.test(formData.password || '') ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className={/[A-Z]/.test(formData.password || '') ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>1 capital letter</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block h-2 w-2 rounded-full ${/[0-9]/.test(formData.password || '') ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className={/[0-9]/.test(formData.password || '') ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>1 number</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`inline-block h-2 w-2 rounded-full ${/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(formData.password || '') ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <span className={/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(formData.password || '') ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>1 special character</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold text-[#6d4c35]">Confirm Password *</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3.5 h-5 w-5 text-[#b68c67]" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Re-enter password"
-                  className="w-full rounded-2xl border border-[#d9c5b0] bg-[#faf4ea] py-3 pl-10 pr-12 outline-none transition placeholder:text-[#a1876d] focus:border-[#7a4e2d] focus:bg-white"
-                />
-                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-3.5 text-[#b68c67] transition hover:text-[#7a4e2d]">
-                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#7a4e2d] px-5 py-3.5 font-semibold text-[#f7efe4] transition hover:bg-[#624021] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <Loader className="h-5 w-5 animate-spin" />
-                  Registering...
-                </>
-              ) : (
-                <>
-                  {role === 'admin' ? 'Register School' : `Register ${role}`}
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
-            </button>
+            )}
           </form>
 
-          <p className="mt-6 border-t border-[#d9c5b0] pt-5 text-center text-sm text-[#6d4c35]">
+          <p className="mt-6 border-t border-slate-200 pt-5 text-center text-sm text-slate-600">
             Already have an account?{' '}
-            <Link to="/login" className="font-semibold text-[#7a4e2d] hover:text-[#624021]">
-              Login here
-            </Link>
+            <Link to="/login" className="font-semibold text-[#2c4d73] hover:text-[#203a59]">Sign in</Link>
           </p>
-        </div>
+        </main>
       </div>
     </div>
   );

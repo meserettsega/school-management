@@ -244,12 +244,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4ecdf] px-4 py-10 text-[#3f2a1d] sm:px-6 lg:px-8">
+    <div className="public-page login-page min-h-screen bg-[#f4ecdf] px-4 py-10 text-[#3f2a1d] sm:px-6 lg:px-8">
       <Toaster position="top-right" />
 
-      <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] max-w-7xl gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
+      <div className="mx-auto grid min-h-[calc(100vh-2.5rem)] max-w-6xl gap-6 lg:grid-cols-[1fr_0.88fr] lg:items-center">
         {/* Left Info Panel */}
-        <div className="relative overflow-hidden rounded-[2rem] border border-[#d9c5b0] bg-gradient-hero p-8 shadow-lg shadow-[#b68c67]/15 lg:p-10">
+        <div className="login-brand-panel relative overflow-hidden rounded-[2rem] border border-[#d9c5b0] bg-gradient-hero p-8 shadow-lg shadow-[#b68c67]/15 lg:p-10">
           <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-[#e8d4bd] blur-3xl" />
           <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-[#c9b39a] blur-3xl" />
           <div className="relative">
@@ -264,18 +264,18 @@ export default function Login() {
             </div>
 
             <h1 className="max-w-xl text-5xl font-black leading-tight tracking-tight text-[#3f2a1d] lg:text-6xl">
-              Login is the gate for the school system.
+            Your school workspace, ready when you are.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-8 text-[#6d4c35]">
-              Enter your school credentials to open the dashboard. The system will identify your role automatically.
+            Sign in securely to reach the tools and updates that matter to your role in the school community.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               {[
-                ['JWT auth', 'Token based login flow', ShieldCheck],
-                ['Role access', 'Automatic from credentials', Users],
-                ['School code', 'Keeps each school separate', Building2],
-                ['Reports', 'PDF and Excel exports later', GraduationCap],
+              ['Secure sign-in', 'Protected account access', ShieldCheck],
+              ['Role-based tools', 'A workspace tailored to you', Users],
+              ['School workspace', 'Your school, kept separate', Building2],
+              ['Academic insights', 'Attendance and results at a glance', GraduationCap],
               ].map(([title, description, Icon]) => (
                 <div key={title} className="rounded-3xl border border-[#d9c5b0] bg-[#fffaf3] p-4 backdrop-blur">
                   <Icon className="h-5 w-5 text-[#7a4e2d]" />
@@ -295,8 +295,8 @@ export default function Login() {
             <>
               <div className="mb-6">
                 <p className="text-sm font-semibold uppercase tracking-[0.25em] text-[#8a6a50]">Welcome back</p>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#3f2a1d]">Login to your dashboard</h2>
-                <p className="mt-2 text-[#6d4c35]">Use the school code you got during registration.</p>
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-[#3f2a1d]">Sign in to SchoolHub</h2>
+                <p className="mt-2 text-[#6d4c35]">Enter your school code and account credentials to continue.</p>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5">
