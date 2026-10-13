@@ -9,6 +9,7 @@ import apiClient from '../../utils/apiClient';
 import MessagingPanel from '../../components/MessagingPanel';
 import MessageNotifications from '../../components/MessageNotifications';
 import NationalExamManager from '../../components/NationalExamManager';
+import DashboardAnalytics from '../../components/DashboardAnalytics';
 
 const AdminDashboard = () => {
   const getTabFromHash = () => {
@@ -1550,8 +1551,22 @@ const AdminDashboard = () => {
     return aFirst.localeCompare(bFirst);
   });
 
+  const classById = new Map(classes.map(classItem => [String(classItem._id), classItem]));
+  const studentsByGrade = Object.entries(students.reduce((counts, student) => {
+    const classId = student.classId?._id || student.classId;
+    const grade = student.classId?.standard || classById.get(String(classId))?.standard || 'Unassigned';
+    counts[grade] = (counts[grade] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+  const schoolComposition = [
+    { name: 'Students', value: students.length },
+    { name: 'Teachers', value: teachers.length },
+    { name: 'Families', value: families.length },
+    { name: 'Sections', value: classes.length },
+  ].filter(item => item.value > 0);
+
   return (
-    <div className="min-h-screen bg-[#f4ecdf] text-[#3f2a1d] flex overflow-hidden">
+    <div className="dashboard-shell min-h-screen bg-[#f4ecdf] text-[#3f2a1d] flex overflow-hidden">
       <Toaster position="top-right" />
       
       {/* Collapsible Sidebar */}
@@ -1703,7 +1718,7 @@ const AdminDashboard = () => {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
+            <div className="dashboard-header flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
               <h1 className="text-sm md:text-base font-black tracking-tight uppercase">WELCOME ADMIN of "{schoolName || 'Your School'}"</h1>
             </div>
             <MessageNotifications
@@ -1752,6 +1767,14 @@ const AdminDashboard = () => {
                   })}
                 </div>
 
+                <DashboardAnalytics
+                  title="School analytics"
+                  description="A live snapshot of student distribution and school community records."
+                  barTitle="Students by grade"
+                  barData={studentsByGrade}
+                  distributionTitle="School community"
+                  distributionData={schoolComposition}
+                />
 
                 {/* FEE COLLECTION CIRCULAR WIDGET */}
                 {(() => {

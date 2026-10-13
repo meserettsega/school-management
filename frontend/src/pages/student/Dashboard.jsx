@@ -8,6 +8,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import apiClient from '../../utils/apiClient';
 import { openProxiedFile } from '../../utils/fileProxy';
 import NationalExamCenter from '../../components/NationalExamCenter';
+import DashboardAnalytics from '../../components/DashboardAnalytics';
 
 const StudentDashboard = () => {
   const [profileData, setProfileData] = useState(null);
@@ -94,6 +95,22 @@ const StudentDashboard = () => {
     { icon: Clock, title: 'Pending Homework', value: String(studentHomework.filter(hw => !hw.submissions?.some(s => s.studentId === profileData?._id || s.studentId?._id === profileData?._id)).length), tone: 'bg-amber-500/10 text-amber-700' },
     { icon: AlertCircle, title: 'Upcoming Exams', value: dashboardStats?.upcomingExams !== undefined ? String(dashboardStats.upcomingExams) : '0', tone: 'bg-rose-500/10 text-rose-700' },
   ];
+
+  const marksBySubject = Object.entries(studentMarks.reduce((scores, mark) => {
+    const subject = mark.subjectId?.name || 'Other';
+    const percentage = Number(mark.percentage) || (Number(mark.outOfMarks) ? (Number(mark.marks || 0) / Number(mark.outOfMarks)) * 100 : 0);
+    if (!scores[subject]) scores[subject] = { total: 0, count: 0 };
+    scores[subject].total += percentage;
+    scores[subject].count += 1;
+    return scores;
+  }, {})).map(([name, score]) => ({ name, value: Math.round(score.total / score.count) }));
+  const attendanceBreakdown = attendanceData?.stats
+    ? [
+        { name: 'Present', value: Number(attendanceData.stats.present) || 0 },
+        { name: 'Absent', value: Number(attendanceData.stats.absent) || 0 },
+        { name: 'Other', value: Math.max(0, Number(attendanceData.stats.total || 0) - Number(attendanceData.stats.present || 0) - Number(attendanceData.stats.absent || 0)) },
+      ].filter(item => item.value > 0)
+    : [];
 
   const fetchStudentData = async () => {
     try {
@@ -293,7 +310,7 @@ const StudentDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
+    <div className="dashboard-shell min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
       <Toaster position="top-right" />
       
       {/* Sidebar Navigation */}
@@ -462,7 +479,7 @@ const StudentDashboard = () => {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
+            <div className="dashboard-header flex-1 rounded-2xl bg-gradient-hero p-3.5 text-[#3f2a1d] shadow-sm flex justify-between items-center flex-wrap gap-4">
               <h1 className="text-sm md:text-base font-black tracking-tight uppercase">Welcome, {profileData?.name || 'Student'}</h1>
             </div>
           </div>
@@ -486,6 +503,15 @@ const StudentDashboard = () => {
                 );
               })}
             </div>
+
+            <DashboardAnalytics
+              title="My learning analytics"
+              description="Track your average subject scores and attendance record."
+              barTitle="Average score by subject (%)"
+              barData={marksBySubject}
+              distributionTitle="Attendance breakdown"
+              distributionData={attendanceBreakdown}
+            />
 
             <div className="grid gap-6 lg:grid-cols-1">
               <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
