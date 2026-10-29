@@ -2,6 +2,7 @@ const School = require('../models/School');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { hashPassword } = require('../utils/password');
+const { findSchoolByCode, normalizeSchoolCode } = require('../utils/schoolCode');
 
 // Create School (Super Admin Only)
 exports.createSchool = async (req, res) => {
@@ -9,7 +10,7 @@ exports.createSchool = async (req, res) => {
     const { name, code, email, phone, address, principalName, principalEmail, adminName, adminEmail, adminPassword } = req.body;
 
     // Check if school exists
-    const schoolExists = await School.findOne({ code });
+    const schoolExists = await findSchoolByCode(code);
     if (schoolExists) {
       return res.status(400).json({ message: 'School with this code already exists' });
     }
@@ -21,7 +22,7 @@ exports.createSchool = async (req, res) => {
     const school = await School.create({
       _id: schoolId,
       name,
-      code,
+      code: normalizeSchoolCode(code),
       adminId,
       email,
       phone,
@@ -131,9 +132,14 @@ exports.updateSchool = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    const updates = { ...req.body };
+    if (typeof updates.code === 'string') {
+      updates.code = normalizeSchoolCode(updates.code);
+    }
+
     const school = await School.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updates,
       { new: true, runValidators: true }
     ).populate('adminId', 'name email');
 

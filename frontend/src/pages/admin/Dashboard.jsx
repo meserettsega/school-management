@@ -9,8 +9,7 @@ import apiClient from '../../utils/apiClient';
 import MessagingPanel from '../../components/MessagingPanel';
 import MessageNotifications from '../../components/MessageNotifications';
 import NationalExamManager from '../../components/NationalExamManager';
-import AdminOverview from '../../components/AdminOverview';
-import TeacherDirectory from '../../components/TeacherDirectory';
+import DashboardAnalytics from '../../components/DashboardAnalytics';
 
 const AdminDashboard = () => {
   const getTabFromHash = () => {
@@ -1552,6 +1551,20 @@ const AdminDashboard = () => {
     return aFirst.localeCompare(bFirst);
   });
 
+  const classById = new Map(classes.map(classItem => [String(classItem._id), classItem]));
+  const studentsByGrade = Object.entries(students.reduce((counts, student) => {
+    const classId = student.classId?._id || student.classId;
+    const grade = student.classId?.standard || classById.get(String(classId))?.standard || 'Unassigned';
+    counts[grade] = (counts[grade] || 0) + 1;
+    return counts;
+  }, {})).map(([name, value]) => ({ name, value }));
+  const schoolComposition = [
+    { name: 'Students', value: students.length },
+    { name: 'Teachers', value: teachers.length },
+    { name: 'Families', value: families.length },
+    { name: 'Sections', value: classes.length },
+  ].filter(item => item.value > 0);
+
   return (
     <div className="dashboard-shell min-h-screen bg-[#f4ecdf] text-[#3f2a1d] flex overflow-hidden">
       <Toaster position="top-right" />
@@ -1722,11 +1735,186 @@ const AdminDashboard = () => {
           <>
             {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
-              <AdminOverview
-                schoolName={schoolName}
-                onSelectTab={setActiveTab}
-                onAddStudent={handleOpenAddStudent}
-              />
+              <div className="grid gap-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    { icon: Users, title: 'Total Students', value: students.length, tone: 'bg-sky-500/10 text-sky-700' },
+                    { icon: GraduationCap, title: 'Total Teachers', value: teachers.length, tone: 'bg-emerald-500/10 text-emerald-700' },
+                    {
+                      icon: BookOpen,
+                      title: 'Total Grades & Sections',
+                      value: (() => {
+                        const totalStds = classes ? [...new Set(classes.map(c => c.standard))].length : 0;
+                        const totalDivs = classes ? classes.length : 0;
+                        return `${totalStds} Grades / ${totalDivs} Sections`;
+                      })(),
+                      tone: 'bg-amber-500/10 text-amber-700'
+                    },
+                    { icon: Bell, title: 'Notices Published', value: noticesCount, tone: 'bg-rose-500/10 text-rose-700' },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <div key={item.title} className="rounded-[1.75rem] border border-[#d9c5b0] bg-[#fffaf3] p-5 shadow-sm">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.tone}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <p className="mt-4 text-sm font-medium text-[#7f634e]">{item.title}</p>
+                        <p className={`mt-1 font-black text-[#3f2a1d] truncate ${typeof item.value === 'string' && item.value.length > 10 ? 'text-xl sm:text-2xl' : 'text-3xl'}`}>
+                          {item.value}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <DashboardAnalytics
+                  title="School analytics"
+                  description="A live snapshot of student distribution and school community records."
+                  barTitle="Students by grade"
+                  barData={studentsByGrade}
+                  distributionTitle="School community"
+                  distributionData={schoolComposition}
+                />
+
+                {/* FEE COLLECTION CIRCULAR WIDGET */}
+                {(() => {
+                  // totalExpected = sum of all fee structure annual amounts configured
+                  let totalExpected = 0;
+                  let totalCollected = 0;
+
+                  for (const struct of feeStructures) {
+                    const qAmt = Math.round(struct.totalAmount / 4);
+                    // Add the configured annual amount for this standard
+                    totalExpected += struct.totalAmount;
+                    // Add collected from all students in this standard
+                    const stdFees = allStudentFees.filter(f => f.classId?.standard === struct.standard);
+                    const collected = stdFees.reduce((acc, f) => {
+                      const paid = ['q1Status','q2Status','q3Status','q4Status'].filter(k => f[k] === 'Paid').length;
+                      return acc + paid * qAmt;
+                    }, 0);
+                    totalCollected += collected;
+                  }
+
+                  const totalPending = totalExpected - totalCollected;
+                  const pct = totalExpected > 0 ? Math.round((totalCollected / totalExpected) * 100) : 0;
+                  const radius = 54;
+                  const circumference = 2 * Math.PI * radius;
+                  const offset = circumference - (pct / 100) * circumference;
+
+                  if (feeStructures.length === 0) return null;
+
+                  return (
+                    <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
+                      <h2 className="text-xl font-bold text-[#3f2a1d] mb-1">Fee Collection</h2>
+                      <p className="text-sm text-[#7f634e] mb-5">Overall collection progress across all grades.</p>
+                      <div className="flex flex-col sm:flex-row items-center gap-8">
+                        {/* Circular SVG */}
+                        <div className="relative shrink-0">
+                          <svg width="140" height="140" className="-rotate-90">
+                            {/* Background track */}
+                            <circle cx="70" cy="70" r={radius} fill="none" stroke="#e8d9c8" strokeWidth="12" />
+                            {/* Progress arc */}
+                            <circle
+                              cx="70" cy="70" r={radius}
+                              fill="none"
+                              stroke="#7a4e2d"
+                              strokeWidth="12"
+                              strokeLinecap="round"
+                              strokeDasharray={circumference}
+                              strokeDashoffset={offset}
+                              style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                            />
+                          </svg>
+                          {/* Centre text */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-black text-[#7a4e2d]">{pct}%</span>
+                            <span className="text-[10px] text-[#8a6a50] font-bold uppercase">Collected</span>
+                          </div>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="flex-1 space-y-3 w-full">
+                          <div className="flex justify-between items-center p-3 bg-white border border-[#d9c5b0]/50 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <span className="h-3 w-3 rounded-full bg-[#7a4e2d] inline-block"></span>
+                              <span className="text-xs font-bold text-[#6d4c35]">Collected</span>
+                            </div>
+                            <span className="font-extrabold text-[#3f2a1d] text-sm">₹{totalCollected.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-3 bg-white border border-[#d9c5b0]/50 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <span className="h-3 w-3 rounded-full bg-rose-400 inline-block"></span>
+                              <span className="text-xs font-bold text-[#6d4c35]">Pending</span>
+                            </div>
+                            <span className="font-extrabold text-rose-600 text-sm">₹{totalPending.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-3 bg-[#7a4e2d]/5 border border-[#d9c5b0]/50 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <span className="h-3 w-3 rounded-full bg-[#d9c5b0] inline-block"></span>
+                              <span className="text-xs font-bold text-[#6d4c35]">Total</span>
+                            </div>
+                            <span className="font-extrabold text-[#3f2a1d] text-sm">
+                              ₹{totalCollected.toLocaleString()} / ₹{totalExpected.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm space-y-4">
+                    <h2 className="text-xl font-bold text-[#3f2a1d]">Upcoming Exams</h2>
+                    <p className="text-sm text-[#7f634e]">Assessments grouped by exam name and date across all grades.</p>
+                    
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {(() => {
+                        const upcoming = exams
+                          .filter(ex => ex.classId?.standard && new Date(ex.date) >= new Date(new Date().setHours(0,0,0,0)))
+                          .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                        if (upcoming.length === 0) {
+                          return <p className="text-xs text-[#8a6a50] italic">No upcoming exams scheduled.</p>;
+                        }
+
+                        // Group exams by name + date
+                        const grouped = {};
+                        for (const ex of upcoming) {
+                          const key = `${ex.name}__${ex.date}`;
+                          if (!grouped[key]) {
+                            grouped[key] = { name: ex.name, date: ex.date, standards: [] };
+                          }
+                          const std = ex.classId?.standard;
+                          if (std && !grouped[key].standards.includes(std)) {
+                            grouped[key].standards.push(std);
+                          }
+                        }
+
+                        // Sort each group's standards in the correct school order
+                        const sortedGroups = Object.values(grouped).map(group => ({
+                          ...group,
+                          standards: [...group.standards].sort(sortStandards)
+                        }));
+
+                        return sortedGroups.map((group, idx) => (
+                          <div key={idx} className="flex justify-between items-start p-3 bg-white border border-[#d9c5b0]/60 rounded-xl shadow-xs gap-3">
+                            <div>
+                              <p className="font-bold text-[#3f2a1d]">{group.name}</p>
+                              <p className="text-[10px] text-[#8a6a50] mt-1">
+                                Grade: {group.standards.length > 0
+                                  ? group.standards.map(s => s.match(/^\d+$/) ? s : s).join(', ')
+                                  : 'N/A'}
+                              </p>
+                            </div>
+                            <span className="bg-emerald-500/10 text-emerald-700 text-xs font-bold px-2 py-1 rounded-md whitespace-nowrap shrink-0">
+                              {new Date(group.date).toLocaleDateString()}
+                            </span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
             )}
 
             {activeTab === 'messages' && (
@@ -1755,10 +1943,10 @@ const AdminDashboard = () => {
             {activeTab === 'teachers' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                      <h2 className="text-2xl font-black text-[#3f2a1d]">👩‍🏫 Teachers by Grade</h2>
-                      <p className="text-xs text-[#8a6a50] mt-1">Subjects assigned per grade, with teachers linked to each subject.</p>
-                    </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-[#3f2a1d]">👩‍🏫 Teachers by Grade</h2>
+                    <p className="text-xs text-[#8a6a50] mt-1">Subjects assigned per grade, with teachers linked to each subject.</p>
+                  </div>
                   <button
                     onClick={() => { setShowAddTeacherModal(true); resetTeacherForm(); }}
                     className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#7a4e2d] text-[#f7efe4] text-xs font-bold hover:bg-[#624021] transition shadow-sm"
