@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext .js,.jsx"
+    "lint": "eslint src --ext .js,.jsx",
+    "test": "vitest run"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^1.9.7",
@@ -32,6 +33,7 @@
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "postcss": "^8.4.32",
-    "vite": "^5.0.7"
+    "vite": "^5.0.7",
+    "vitest": "^1.6.1"
   }
 }

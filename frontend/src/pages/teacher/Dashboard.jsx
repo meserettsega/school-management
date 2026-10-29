@@ -10,7 +10,7 @@ import { openProxiedFile } from '../../utils/fileProxy';
 import MessagingPanel from '../../components/MessagingPanel';
 import MessageNotifications from '../../components/MessageNotifications';
 import NationalExamManager from '../../components/NationalExamManager';
-import DashboardAnalytics from '../../components/DashboardAnalytics';
+import TeacherOverview from '../../components/TeacherOverview';
 
 const TeacherDashboard = () => {
   const getTabFromHash = () => {
@@ -67,6 +67,8 @@ const TeacherDashboard = () => {
   const [selectedClassId, setSelectedClassId] = useState(null);
   const [expandedAllDivsStd, setExpandedAllDivsStd] = useState(null);
   const [profileData, setProfileData] = useState(null);
+  const [teacherOverview, setTeacherOverview] = useState(null);
+  const [teacherOverviewError, setTeacherOverviewError] = useState('');
   const [myGrievances, setMyGrievances] = useState([]);
   const [loading, setLoading] = useState(true);
   const [teacherTimetables, setTeacherTimetables] = useState([]);
@@ -250,6 +252,14 @@ const TeacherDashboard = () => {
 
       const resProfile = await apiClient.get('/auth/profile');
       setProfileData(resProfile.data.user || null);
+
+      try {
+        const resTeacherOverview = await apiClient.get('/dashboard/teacher');
+        setTeacherOverview(resTeacherOverview.data);
+        setTeacherOverviewError('');
+      } catch (overviewError) {
+        setTeacherOverviewError(overviewError.response?.data?.message || 'Could not load your teaching summary.');
+      }
 
       const resGrievances = await apiClient.get('/complaints/my');
       setMyGrievances(resGrievances.data.complaints || []);
@@ -587,38 +597,6 @@ const TeacherDashboard = () => {
     s.registrationNumber?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const myAssignedHomework = assignedHomework.filter(homework => {
-    const teacherId = homework.teacherId?._id || homework.teacherId;
-    return Boolean(profileData?._id && teacherId && String(teacherId) === String(profileData._id));
-  });
-  const outstandingSubmissions = myAssignedHomework.reduce(
-    (total, homework) => total + Math.max(0, Number(homework.totalStudents || 0) - Number(homework.submittedCount || 0)),
-    0
-  );
-
-  const stats = [
-    { icon: Users, title: 'Total Students', value: students.length, tone: 'bg-sky-500/10 text-sky-700' },
-    { icon: BookOpen, title: 'Classes Assigned', value: profileData?.subjectClassAssignments ? [...new Set(profileData.subjectClassAssignments.map(ass => ass.classId?._id || ass.classId).filter(Boolean))].length : 0, tone: 'bg-emerald-500/10 text-emerald-700' },
-    { icon: CheckCircle, title: 'Active Homework', value: myAssignedHomework.length, tone: 'bg-amber-500/10 text-amber-700' },
-    { icon: AlertCircle, title: 'Outstanding Submissions', value: outstandingSubmissions, tone: 'bg-rose-500/10 text-rose-700' },
-  ];
-
-  const classById = new Map(allClasses.map(classItem => [String(classItem._id), classItem]));
-  const studentsBySection = Object.entries(students.reduce((counts, student) => {
-    const classId = student.classId?._id || student.classId;
-    const classItem = student.classId?.standard ? student.classId : classById.get(String(classId));
-    const section = classItem
-      ? `Grade ${classItem.standard}${classItem.division ? ` - ${classItem.division}` : ''}`
-      : 'Unassigned';
-    counts[section] = (counts[section] || 0) + 1;
-    return counts;
-  }, {})).map(([name, value]) => ({ name, value }));
-  const assignmentsBySubject = Object.entries((profileData?.subjectClassAssignments || []).reduce((counts, assignment) => {
-    const subjectName = assignment.subjectId?.name || 'Unassigned';
-    counts[subjectName] = (counts[subjectName] || 0) + 1;
-    return counts;
-  }, {})).map(([name, value]) => ({ name, value }));
-
   return (
     <div className="dashboard-shell min-h-screen bg-[#f4ecdf] flex flex-col md:flex-row text-[#3f2a1d]">
       <Toaster position="top-right" />
@@ -831,96 +809,12 @@ const TeacherDashboard = () => {
           <>
             {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {stats.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div key={item.title} className="rounded-[1.75rem] border border-[#d9c5b0] bg-[#fffaf3] p-5 shadow-sm">
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${item.tone}`}>
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <p className="mt-4 text-sm font-medium text-[#7f634e]">{item.title}</p>
-                        <p className="mt-1 text-3xl font-black text-[#3f2a1d]">{item.value}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <DashboardAnalytics
-                  title="Teaching analytics"
-                  description="An overview of your student roster and subject-class assignments."
-                  barTitle="Students by section"
-                  barData={studentsBySection}
-                  distributionTitle="Assigned classes by subject"
-                  distributionData={assignmentsBySubject}
-                />
-
-                <div className="grid gap-6 md:grid-cols-3">
-                  {/* Class Teacher Profile Block */}
-                  <div className="rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-[#8a6a50]">Designation</span>
-                      <h3 className="text-xl font-black text-[#3f2a1d] mt-1">Class Teacher Assignment</h3>
-                      <p className="mt-2 text-xs text-[#6d4c35]">
-                        Class teachers manage grade student registers, class notices, and class attendance rosters.
-                      </p>
-                    </div>
-                    <div className="mt-6 pt-4 border-t border-[#d9c5b0]/20">
-                      {profileData?.isClassTeacher && profileData.classTeacherOf ? (
-                        <div className="rounded-2xl bg-[#7a4e2d] p-4 text-center">
-                          <p className="text-[10px] uppercase font-bold tracking-widest text-[#d9c5b0]">Assigned Class</p>
-                          <h4 className="text-2xl font-black text-[#f7efe4] mt-1">
-                            Grade {profileData.classTeacherOf.standard} (Section {profileData.classTeacherOf.division})
-                          </h4>
-                        </div>
-                      ) : (
-                        <div className="rounded-2xl bg-[#f4ecdf] p-4 text-center text-[#8a6a50] font-semibold text-xs border border-dashed border-[#d9c5b0]">
-                          Not currently assigned as Class Teacher
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Teaching Workload Work assignments */}
-                  <div className="md:col-span-2 rounded-[2rem] border border-[#d9c5b0] bg-[#fffaf3] p-6 shadow-sm">
-                    <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#d9c5b0]/20">
-                      <div>
-                        <h2 className="text-xl font-bold text-[#3f2a1d]">My Teaching Assignments</h2>
-                        <p className="text-xs text-[#7f634e]">Subjects and class sections assigned to you by school administrators.</p>
-                      </div>
-                      <GraduationCap className="h-5 w-5 text-[#b68c67]" />
-                    </div>
-
-                    {profileData?.subjectClassAssignments && profileData.subjectClassAssignments.length > 0 ? (
-                      <div className="grid gap-3 sm:grid-cols-2 max-h-[320px] overflow-y-auto pr-1">
-                        {profileData.subjectClassAssignments.map((ass, index) => {
-                          if (!ass.classId || !ass.subjectId) return null;
-                          return (
-                            <div key={index} className="rounded-2xl bg-[#f4ecdf] p-4 flex flex-col justify-between border border-[#d9c5b0]/30 hover:shadow-sm transition">
-                              <div>
-                                <span className="text-[9px] uppercase font-bold tracking-wider text-[#8a6a50]">Subject</span>
-                                <h4 className="font-bold text-[#3f2a1d] text-sm">{ass.subjectId.name}</h4>
-                                <p className="text-[10px] text-[#8a6a50] font-medium">Code: {ass.subjectId.code}</p>
-                              </div>
-                              <div className="mt-4 pt-2 border-t border-[#d9c5b0]/20 flex justify-between items-center">
-                                <span className="text-[9px] uppercase font-bold tracking-wider text-[#8a6a50]">Section</span>
-                                <span className="rounded-lg bg-[#7a4e2d] px-2 py-0.5 text-xs font-black text-[#f7efe4]">
-                                  Grade {ass.classId.standard} (Section {ass.classId.division})
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-10 text-[#8a6a50] italic border border-dashed border-[#d9c5b0] rounded-2xl bg-[#f4ecdf]/30 text-xs">
-                        No subject assignments configured by admin.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <TeacherOverview
+                teacher={profileData}
+                overview={teacherOverview}
+                error={teacherOverviewError}
+                onOpenTab={(tab) => setActiveTab(tab)}
+              />
             )}
 
             {activeTab === 'messages' && (
