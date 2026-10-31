@@ -12,6 +12,8 @@ import MessageNotifications from '../../components/MessageNotifications';
 import NationalExamManager from '../../components/NationalExamManager';
 import TeacherOverview from '../../components/TeacherOverview';
 
+const TEACHER_OVERVIEW_VERSION = 'teacher-overview-v2';
+
 const TeacherDashboard = () => {
   const getTabFromHash = () => {
     const hash = window.location.hash.replace('#/', '');
@@ -23,15 +25,18 @@ const TeacherDashboard = () => {
   };
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (localStorage.getItem('teacherDashboardVersion') !== TEACHER_OVERVIEW_VERSION) {
+      return 'overview';
+    }
+
     const tabFromHash = getTabFromHash();
     if (tabFromHash) return tabFromHash;
     return localStorage.getItem('teacherActiveTab') || 'overview';
   });
 
   useEffect(() => {
-    // Ensure hash is set on initial mount
-    const tabFromHash = getTabFromHash();
-    const initialTab = tabFromHash || activeTab;
+    localStorage.setItem('teacherDashboardVersion', TEACHER_OVERVIEW_VERSION);
+    const initialTab = activeTab;
     const pageUrl = `${window.location.pathname}#/${initialTab}`;
     window.history.replaceState({ tab: initialTab, sentinel: 0 }, '', pageUrl);
     // Fill the history stack with 30 sentinel entries so the back button
