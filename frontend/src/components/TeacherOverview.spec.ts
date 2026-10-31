@@ -34,7 +34,8 @@ describe('TeacherOverview', () => {
       })
     );
 
-    expect(markup).toContain('Welcome, Mulugeta Haile');
+    expect(markup).toContain('My teaching');
+    expect(markup).toContain('Mulugeta Haile');
     expect(markup).toContain('Mathematics');
     expect(markup).toContain('Grade 7 - A');
     expect(markup).toContain('31');

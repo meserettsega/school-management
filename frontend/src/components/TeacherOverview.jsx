@@ -36,11 +36,9 @@ const TeacherOverview = ({ teacher, overview, error, onOpenTab }) => {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold text-slate-500">Home / My teaching</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#172536]">
-            Welcome, {teacher?.name || 'Teacher'}
-          </h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#172536]">My teaching</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Your assigned sections, weekly workload, and recorded attendance.
+            Teaching overview for {teacher?.name || 'your account'}: assigned sections, weekly workload, and recorded attendance.
           </p>
         </div>
         <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
