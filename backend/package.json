@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "jest --detectOpenHandles"
+    "test": "jest --detectOpenHandles",
+    "check:mysql": "node scripts/check-mysql.js"
   },
   "keywords": [
     "school",
@@ -29,6 +30,7 @@
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.5.0",
     "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.24.6",
     "node-cron": "^3.0.3",
     "nodemailer": "^9.0.3",
     "pdfkit": "^0.13.0",
