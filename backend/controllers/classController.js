@@ -1,10 +1,29 @@
 const Class = require('../models/Class');
+const {
+  bulkSetupClasses,
+  createClass,
+  deleteClass,
+  deleteStandard,
+  getClassById,
+  getClassStudents,
+  listClasses,
+  updateClass,
+} = require('../repositories/mysqlAcademicRepository');
+
+const sendDatabaseError = (res, error) => {
+  const status = error.statusCode || (error.code === 'ER_DUP_ENTRY' ? 400 : 500);
+  return res.status(status).json({ message: error.message });
+};
 
 // Get All Classes
 exports.getAllClasses = async (req, res) => {
   try {
     const schoolId = req.user.schoolId;
     const { standard, page = 1, limit = 10 } = req.query;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      return res.json(await listClasses({ schoolId, standard, page, limit }));
+    }
 
     let query = { schoolId };
     if (standard) query.standard = standard;
@@ -24,6 +43,7 @@ exports.getAllClasses = async (req, res) => {
       },
     });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -31,6 +51,15 @@ exports.getAllClasses = async (req, res) => {
 // Get Class by ID
 exports.getClassById = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const classData = await getClassById({
+        schoolId: req.user.schoolId,
+        classId: req.params.id,
+      });
+      if (!classData) return res.status(404).json({ message: 'Class not found' });
+      return res.json({ class: classData });
+    }
+
     const classData = await Class.findOne({
       _id: req.params.id,
       schoolId: req.user.schoolId,
@@ -44,6 +73,7 @@ exports.getClassById = async (req, res) => {
 
     res.json({ class: classData });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -52,6 +82,19 @@ exports.getClassById = async (req, res) => {
 exports.createClass = async (req, res) => {
   try {
     const { standard, division, academicYear } = req.body;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const classData = await createClass({
+        schoolId: req.user.schoolId,
+        standard,
+        division,
+        academicYear,
+      });
+      return res.status(201).json({
+        message: 'Class created successfully',
+        class: classData,
+      });
+    }
 
     // Check if class exists (without filtering by academicYear since index standard+division is unique per school)
     let classExists = await Class.findOne({
@@ -114,6 +157,12 @@ exports.createClass = async (req, res) => {
       class: newClass,
     });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({ message: 'Class standard and division already exists.' });
+      }
+      return sendDatabaseError(res, error);
+    }
     if (error.code === 11000 || error.message?.includes('E11000') || error.message?.includes('duplicate key')) {
       return res.status(400).json({ message: 'Class standard and division already exists.' });
     }
@@ -124,6 +173,16 @@ exports.createClass = async (req, res) => {
 // Update Class
 exports.updateClass = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const classData = await updateClass({
+        schoolId: req.user.schoolId,
+        classId: req.params.id,
+        updates: req.body,
+      });
+      if (!classData) return res.status(404).json({ message: 'Class not found' });
+      return res.json({ message: 'Class updated successfully', class: classData });
+    }
+
     const classData = await Class.findOneAndUpdate(
       { _id: req.params.id, schoolId: req.user.schoolId },
       req.body,
@@ -139,6 +198,7 @@ exports.updateClass = async (req, res) => {
       class: classData,
     });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -146,6 +206,15 @@ exports.updateClass = async (req, res) => {
 // Delete Class
 exports.deleteClass = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const deleted = await deleteClass({
+        schoolId: req.user.schoolId,
+        classId: req.params.id,
+      });
+      if (!deleted) return res.status(404).json({ message: 'Class not found' });
+      return res.json({ message: 'Class deleted successfully' });
+    }
+
     const classData = await Class.findOneAndDelete({
       _id: req.params.id,
       schoolId: req.user.schoolId,
@@ -233,6 +302,7 @@ exports.deleteClass = async (req, res) => {
 
     res.json({ message: 'Class deleted successfully' });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -242,6 +312,14 @@ exports.deleteStandard = async (req, res) => {
   try {
     const { standardName } = req.params;
     const schoolId = req.user.schoolId;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const deleted = await deleteStandard({ schoolId, standard: standardName });
+      if (!deleted) return res.status(404).json({ message: 'No classes found for this standard' });
+      return res.json({
+        message: `All divisions for standard ${standardName} deleted successfully`,
+      });
+    }
 
     // Find all classes matching this standard
     const classesToDelete = await Class.find({ standard: standardName, schoolId });
@@ -277,6 +355,7 @@ exports.deleteStandard = async (req, res) => {
 
     res.json({ message: `All divisions for standard ${standardName} deleted successfully` });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -284,6 +363,15 @@ exports.deleteStandard = async (req, res) => {
 // Get Class Students
 exports.getClassStudents = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const result = await getClassStudents({
+        schoolId: req.user.schoolId,
+        classId: req.params.id,
+      });
+      if (!result) return res.status(404).json({ message: 'Class not found' });
+      return res.json(result);
+    }
+
     const Student = require('../models/Student');
 
     const classData = await Class.findOne({
@@ -306,6 +394,7 @@ exports.getClassStudents = async (req, res) => {
       totalStudents: students.length,
     });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') return sendDatabaseError(res, error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -314,6 +403,17 @@ exports.getClassStudents = async (req, res) => {
 exports.bulkSetupClasses = async (req, res) => {
   try {
     const { classesConfig } = req.body;
+    if (process.env.DB_ENGINE === 'mysql') {
+      if (!Array.isArray(classesConfig)) {
+        return res.status(400).json({ message: 'classesConfig is required and must be an array' });
+      }
+      const classes = await bulkSetupClasses({
+        schoolId: req.user.schoolId,
+        classesConfig,
+      });
+      return res.json({ message: 'Classes configured successfully', classes });
+    }
+
     if (!classesConfig || !Array.isArray(classesConfig)) {
       return res.status(400).json({ message: 'classesConfig is required and must be an array' });
     }
@@ -407,6 +507,12 @@ exports.bulkSetupClasses = async (req, res) => {
       classes: finalClasses
     });
   } catch (error) {
+    if (process.env.DB_ENGINE === 'mysql') {
+      if (error.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({ message: 'One or more of the classes you are trying to configure already exist.' });
+      }
+      return sendDatabaseError(res, error);
+    }
     if (error.code === 11000 || error.message?.includes('E11000') || error.message?.includes('duplicate key')) {
       return res.status(400).json({ message: 'One or more of the classes you are trying to configure already exist.' });
     }
