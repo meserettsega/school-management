@@ -7,6 +7,22 @@ const mongoose = require('mongoose');
 const { hashPassword, comparePassword } = require('../utils/password');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 const { findSchoolByCode, normalizeSchoolCode } = require('../utils/schoolCode');
+const {
+  createLoginSession,
+  createSchoolAndAdmin,
+  completePasswordReset,
+  findPasswordResetAccount,
+  findLoginAccount,
+  getUserById,
+  getUserProfile,
+  mapUser,
+  revokeLoginSession,
+  rotateLoginSession,
+  setPasswordResetCode,
+  updateUserPassword,
+  updateUserProfile,
+  verifyPasswordResetCode,
+} = require('../repositories/mysqlAuthRepository');
 
 // Password Validation Helper: 6+ chars, 1 capital, 1 number, 1 special character
 const validatePasswordStrength = (password) => {
@@ -15,6 +31,26 @@ const validatePasswordStrength = (password) => {
   const hasNumber = /[0-9]/.test(password);
   const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password);
   return minLength && hasCapital && hasNumber && hasSpecial;
+};
+
+const generatePasswordResetCode = () => {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const numbers = '0123456789';
+  const specials = '!@#$%&*';
+  const codeArray = [
+    letters.charAt(Math.floor(Math.random() * letters.length)),
+    numbers.charAt(Math.floor(Math.random() * numbers.length)),
+    specials.charAt(Math.floor(Math.random() * specials.length)),
+  ];
+  const pool = letters + numbers + specials;
+  for (let i = 0; i < 2; i++) {
+    codeArray.push(pool.charAt(Math.floor(Math.random() * pool.length)));
+  }
+  for (let i = codeArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [codeArray[i], codeArray[j]] = [codeArray[j], codeArray[i]];
+  }
+  return codeArray.join('');
 };
 
 
@@ -64,6 +100,53 @@ exports.register = async (req, res) => {
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: 'Name, email, password, and role are required' });
+    }
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      if (role !== 'admin') {
+        return res.status(403).json({ message: 'Self-registration is only allowed for Admin/School accounts. Student and Teacher accounts must be created by the Administrator.' });
+      }
+
+      if (!schoolName || !schoolCode) {
+        return res.status(400).json({ message: 'School name and school code are required for admin registration' });
+      }
+
+      if (!validatePasswordStrength(password)) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters, contain 1 capital letter, 1 number, and 1 special character' });
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const { school, admin } = await createSchoolAndAdmin({
+        name: schoolName,
+        code: schoolCode,
+        email,
+        phone,
+        address: req.body.address,
+        principalName: req.body.adminName || name,
+        principalEmail: email,
+        adminName: name,
+        adminEmail: email,
+        adminPassword: hashedPassword,
+      });
+      const user = {
+        _id: admin.id,
+        schoolId: school._id,
+        name: admin.name,
+        email: admin.email,
+        phone: phone || null,
+        role: 'admin',
+      };
+      const accessToken = generateAccessToken(user._id, user.schoolId, user.role);
+      const refreshToken = generateRefreshToken(user._id, user.schoolId, user.role);
+      await createLoginSession({ userId: user._id, role: user.role, refreshToken });
+
+      return res.status(201).json({
+        message: 'User registered successfully',
+        user,
+        school,
+        accessToken,
+        refreshToken,
+      });
     }
 
     if (role !== 'admin') {
@@ -186,6 +269,9 @@ exports.register = async (req, res) => {
       refreshToken,
     });
   } catch (error) {
+    if (error.code === 'SCHOOL_ALREADY_EXISTS' || error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ message: 'School with this code or email already exists' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -197,6 +283,34 @@ exports.login = async (req, res) => {
 
     if (!email || !password || !schoolCode) {
       return res.status(400).json({ message: 'Email, password, and school code are required' });
+    }
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const loginAccount = await findLoginAccount(email, schoolCode);
+      if (!loginAccount.school) {
+        return res.status(404).json({ message: 'School does not exist' });
+      }
+      if (!loginAccount.account) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const isPasswordValid = await comparePassword(password, loginAccount.account.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const user = mapUser(loginAccount.account);
+      const accessToken = generateAccessToken(user._id, user.schoolId, user.role);
+      const refreshToken = generateRefreshToken(user._id, user.schoolId, user.role);
+      await createLoginSession({ userId: user._id, role: user.role, refreshToken });
+
+      return res.json({
+        message: 'Login successful',
+        user,
+        school: loginAccount.school,
+        accessToken,
+        refreshToken,
+      });
     }
 
     // Find school by code
@@ -266,6 +380,25 @@ exports.refreshToken = async (req, res) => {
       return res.status(403).json({ message: 'Invalid refresh token' });
     }
 
+    if (process.env.DB_ENGINE === 'mysql') {
+      const newRefreshToken = generateRefreshToken(decoded.userId, decoded.schoolId, decoded.role);
+      const user = await rotateLoginSession({
+        userId: decoded.userId,
+        role: decoded.role,
+        currentToken: refreshToken,
+        nextToken: newRefreshToken,
+      });
+      if (!user) {
+        return res.status(403).json({ message: 'Invalid refresh token' });
+      }
+
+      const mappedUser = mapUser(user);
+      return res.json({
+        accessToken: generateAccessToken(mappedUser._id, mappedUser.schoolId, mappedUser.role),
+        refreshToken: newRefreshToken,
+      });
+    }
+
     const user = await findUserByIdAndRole(decoded.userId, decoded.role);
     if (!user || !user.refreshTokens.find(t => t.token === refreshToken)) {
       return res.status(403).json({ message: 'Invalid refresh token' });
@@ -291,6 +424,16 @@ exports.refreshToken = async (req, res) => {
 exports.logout = async (req, res) => {
   try {
     const { refreshToken } = req.body;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      await revokeLoginSession({
+        userId: req.user.userId,
+        role: req.user.role,
+        refreshToken,
+      });
+      return res.json({ message: 'Logged out successfully' });
+    }
+
     const user = await findUserByIdAndRole(req.user.userId, req.user.role);
 
     if (refreshToken && user) {
@@ -307,6 +450,17 @@ exports.logout = async (req, res) => {
 // Get User Profile
 exports.getProfile = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const user = await getUserProfile({
+        userId: req.user.userId,
+        role: req.user.role,
+      });
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      return res.json({ user });
+    }
+
     const Model = getUserModelByRole(req.user.role);
     let query = Model.findById(req.user.userId).populate('schoolId');
     
@@ -342,6 +496,21 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { name, phone, avatar } = req.body;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const user = await updateUserProfile({
+        userId: req.user.userId,
+        role: req.user.role,
+        name,
+        phone,
+        avatar,
+      });
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      return res.json({ message: 'Profile updated successfully', user });
+    }
+
     const Model = getUserModelByRole(req.user.role);
 
     const user = await Model.findByIdAndUpdate(
@@ -363,6 +532,34 @@ exports.updateProfile = async (req, res) => {
 exports.changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const user = await getUserById({
+        userId: req.user.userId,
+        role: req.user.role,
+        includePassword: true,
+      });
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const isPasswordValid = await comparePassword(oldPassword, user.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Old password is incorrect' });
+      }
+
+      if (!validatePasswordStrength(newPassword)) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters, contain 1 capital letter, 1 number, and 1 special character' });
+      }
+
+      await updateUserPassword({
+        userId: req.user.userId,
+        role: req.user.role,
+        password: await hashPassword(newPassword),
+      });
+      return res.json({ message: 'Password changed successfully' });
+    }
+
     const Model = getUserModelByRole(req.user.role);
 
     const user = await Model.findById(req.user.userId).select('+password');
@@ -394,6 +591,22 @@ exports.forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Email is required' });
     }
 
+    if (process.env.DB_ENGINE === 'mysql') {
+      const code = generatePasswordResetCode();
+      const account = await setPasswordResetCode({
+        email,
+        code,
+        expiresAt: new Date(Date.now() + 60 * 1000),
+      });
+      if (!account) {
+        return res.status(404).json({ message: "User doesn't exist" });
+      }
+
+      const { sendResetEmail } = require('../utils/email');
+      await sendResetEmail(email, code);
+      return res.json({ message: 'A 5-letter verification code has been sent to your email.' });
+    }
+
     // Find user across collections
     let user = await User.findOne({ email });
     if (!user) user = await Teacher.findOne({ email });
@@ -404,30 +617,7 @@ exports.forgotPassword = async (req, res) => {
     }
 
     // Generate unique 5-char code containing letters, numbers, and special characters
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    const specials = '!@#$%&*';
-    
-    // Guarantee at least one of each class
-    const codeArray = [
-      letters.charAt(Math.floor(Math.random() * letters.length)),
-      numbers.charAt(Math.floor(Math.random() * numbers.length)),
-      specials.charAt(Math.floor(Math.random() * specials.length))
-    ];
-    
-    // Fill the remaining 2 characters
-    const pool = letters + numbers + specials;
-    for (let i = 0; i < 2; i++) {
-      codeArray.push(pool.charAt(Math.floor(Math.random() * pool.length)));
-    }
-    
-    // Shuffle the array to randomize positions
-    for (let i = codeArray.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [codeArray[i], codeArray[j]] = [codeArray[j], codeArray[i]];
-    }
-    
-    const code = codeArray.join('');
+    const code = generatePasswordResetCode();
 
     // Code valid for 1 minute
     user.passwordResetToken = code;
@@ -450,6 +640,17 @@ exports.verifyResetCode = async (req, res) => {
     const { email, code } = req.body;
     if (!email || !code) {
       return res.status(400).json({ message: 'Email and code are required' });
+    }
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const { account, valid } = await verifyPasswordResetCode({ email, code });
+      if (!account) {
+        return res.status(404).json({ message: "User doesn't exist" });
+      }
+      if (!valid) {
+        return res.status(400).json({ message: 'wrong code' });
+      }
+      return res.json({ message: 'Code verified successfully.' });
     }
 
     let user = await User.findOne({ email });
@@ -476,6 +677,30 @@ exports.resetPassword = async (req, res) => {
     const { email, code, newPassword } = req.body;
     if (!email || !code || !newPassword) {
       return res.status(400).json({ message: 'Email, code, and new password are required' });
+    }
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const account = await findPasswordResetAccount(email);
+      if (!account) {
+        return res.status(404).json({ message: "User doesn't exist" });
+      }
+      const { valid } = await verifyPasswordResetCode({ email, code });
+      if (!valid) {
+        return res.status(400).json({ message: 'wrong code' });
+      }
+      if (!validatePasswordStrength(newPassword)) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters, contain 1 capital letter, 1 number, and 1 special character' });
+      }
+
+      const updated = await completePasswordReset({
+        email,
+        code,
+        password: await hashPassword(newPassword),
+      });
+      if (!updated) {
+        return res.status(400).json({ message: 'wrong code' });
+      }
+      return res.json({ message: 'Password reset successfully.' });
     }
 
     let user = await User.findOne({ email });

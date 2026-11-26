@@ -98,8 +98,18 @@ const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health Check
-app.get('/api/health', (req, res) => {
-  res.json({ message: 'Server is running' });
+app.get('/api/health', async (req, res) => {
+  if (process.env.DB_ENGINE === 'mysql') {
+    try {
+      const { checkMysqlConnection } = require('./config/mysqlDatabase');
+      await checkMysqlConnection();
+      return res.json({ message: 'Server is running', database: 'mysql' });
+    } catch (error) {
+      return res.status(503).json({ message: 'Database is unavailable' });
+    }
+  }
+
+  res.json({ message: 'Server is running', database: 'mongodb' });
 });
 
 // Socket.io Connection
@@ -149,33 +159,35 @@ server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Auto Notice Expiration Cleanup Task
-  const Notice = require('./models/Notice');
-  const { deleteCloudinaryFile } = require('./utils/cloudinaryHelper');
+  if (process.env.DB_ENGINE !== 'mysql') {
+    // Auto Notice Expiration Cleanup Task
+    const Notice = require('./models/Notice');
+    const { deleteCloudinaryFile } = require('./utils/cloudinaryHelper');
 
-  const cleanupExpiredNotices = async () => {
-    try {
-      const expiredNotices = await Notice.find({ expiresAt: { $lte: new Date() } });
-      if (expiredNotices.length > 0) {
-        console.log(`Found ${expiredNotices.length} expired notices. Cleaning up...`);
-        for (const notice of expiredNotices) {
-          if (notice.attachments && notice.attachments.length > 0) {
-            for (const url of notice.attachments) {
-              if (url) await deleteCloudinaryFile(url);
+    const cleanupExpiredNotices = async () => {
+      try {
+        const expiredNotices = await Notice.find({ expiresAt: { $lte: new Date() } });
+        if (expiredNotices.length > 0) {
+          console.log(`Found ${expiredNotices.length} expired notices. Cleaning up...`);
+          for (const notice of expiredNotices) {
+            if (notice.attachments && notice.attachments.length > 0) {
+              for (const url of notice.attachments) {
+                if (url) await deleteCloudinaryFile(url);
+              }
             }
+            await Notice.findByIdAndDelete(notice._id);
+            console.log(`Automatically deleted expired notice: ${notice.title}`);
           }
-          await Notice.findByIdAndDelete(notice._id);
-          console.log(`Automatically deleted expired notice: ${notice.title}`);
         }
+      } catch (err) {
+        console.error('Error in expired notice cleanup scheduler:', err);
       }
-    } catch (err) {
-      console.error('Error in expired notice cleanup scheduler:', err);
-    }
-  };
+    };
 
-  // Run immediately on boot, and then every hour
-  cleanupExpiredNotices();
-  setInterval(cleanupExpiredNotices, 60 * 60 * 1000);
+    // Run immediately on boot, and then every hour
+    cleanupExpiredNotices();
+    setInterval(cleanupExpiredNotices, 60 * 60 * 1000);
+  }
 });
 
 // Handle Unhandled Rejections

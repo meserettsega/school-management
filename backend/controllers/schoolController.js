@@ -3,11 +3,44 @@ const User = require('../models/User');
 const mongoose = require('mongoose');
 const { hashPassword } = require('../utils/password');
 const { findSchoolByCode, normalizeSchoolCode } = require('../utils/schoolCode');
+const {
+  createSchoolAndAdmin,
+  getSchoolById,
+  getSchoolStats: getMysqlSchoolStats,
+  listSchools,
+  updateSchoolById,
+} = require('../repositories/mysqlAuthRepository');
 
 // Create School (Super Admin Only)
 exports.createSchool = async (req, res) => {
   try {
     const { name, code, email, phone, address, principalName, principalEmail, adminName, adminEmail, adminPassword } = req.body;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      if (!name || !code || !email || !phone || !adminName || !adminEmail || !adminPassword) {
+        return res.status(400).json({ message: 'School and administrator details are required' });
+      }
+
+      const hashedPassword = await hashPassword(adminPassword);
+      const result = await createSchoolAndAdmin({
+        name,
+        code,
+        email,
+        phone,
+        address,
+        principalName,
+        principalEmail,
+        adminName,
+        adminEmail,
+        adminPassword: hashedPassword,
+      });
+
+      return res.status(201).json({
+        message: 'School created successfully',
+        school: result.school,
+        admin: result.admin,
+      });
+    }
 
     // Check if school exists
     const schoolExists = await findSchoolByCode(code);
@@ -52,6 +85,9 @@ exports.createSchool = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error.code === 'SCHOOL_ALREADY_EXISTS' || error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ message: 'School with this code or email already exists' });
+    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -60,6 +96,23 @@ exports.createSchool = async (req, res) => {
 exports.getAllSchools = async (req, res) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const currentPage = Math.max(1, Number.parseInt(page, 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 10));
+      const { schools, total } = await listSchools({
+        page: currentPage,
+        limit: pageSize,
+        search,
+      });
+      return res.json({
+        schools,
+        pagination: {
+          total,
+          pages: Math.ceil(total / pageSize),
+        },
+      });
+    }
 
     let query = {};
     if (search) {
@@ -96,6 +149,14 @@ exports.getSchoolById = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    if (process.env.DB_ENGINE === 'mysql') {
+      const school = await getSchoolById(req.params.id);
+      if (!school) {
+        return res.status(404).json({ message: 'School not found' });
+      }
+      return res.json({ school });
+    }
+
     const school = await School.findById(req.params.id)
       .populate('adminId', 'name email phone');
 
@@ -112,6 +173,14 @@ exports.getSchoolById = async (req, res) => {
 // Get My School (For Admin)
 exports.getMySchool = async (req, res) => {
   try {
+    if (process.env.DB_ENGINE === 'mysql') {
+      const school = await getSchoolById(req.user.schoolId);
+      if (!school) {
+        return res.status(404).json({ message: 'School not found' });
+      }
+      return res.json({ school });
+    }
+
     const school = await School.findById(req.user.schoolId)
       .populate('adminId', 'name email phone');
 
@@ -130,6 +199,18 @@ exports.updateSchool = async (req, res) => {
   try {
     if (req.params.id !== req.user.schoolId) {
       return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const updates = { ...req.body };
+      if (typeof updates.code === 'string') {
+        updates.code = updates.code.trim().toUpperCase();
+      }
+      const school = await updateSchoolById(req.params.id, updates);
+      if (!school) {
+        return res.status(404).json({ message: 'School not found' });
+      }
+      return res.json({ message: 'School updated successfully', school });
     }
 
     const updates = { ...req.body };
@@ -160,6 +241,11 @@ exports.updateSchool = async (req, res) => {
 exports.getSchoolStats = async (req, res) => {
   try {
     const schoolId = req.user.schoolId;
+
+    if (process.env.DB_ENGINE === 'mysql') {
+      const stats = await getMysqlSchoolStats(schoolId);
+      return res.json({ stats });
+    }
 
     const Student = require('../models/Student');
     const Teacher = require('../models/Teacher');
