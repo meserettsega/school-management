@@ -32,10 +32,16 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 // Initialize Express and Socket.io
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  'https://safeneststu.com',
+  'https://www.safeneststu.com',
+  'https://schoolhub.safeneststu.com',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
 ].filter(Boolean);
+const allowedOriginSet = new Set(
+  allowedOrigins.map((origin) => origin.replace(/\/$/, ''))
+);
 
 const app = express();
 const server = http.createServer(app);
@@ -51,11 +57,12 @@ const io = socketIO(server, {
 app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Fallback to accept other local variants if needed
+    const normalizedOrigin = origin?.replace(/\/$/, '');
+    if (!normalizedOrigin || allowedOriginSet.has(normalizedOrigin)) {
+      return callback(null, true);
     }
+
+    callback(null, false);
   },
   credentials: true,
 }));
