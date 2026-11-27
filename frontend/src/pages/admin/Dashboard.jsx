@@ -625,6 +625,9 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const resClasses = await apiClient.get('/classes?limit=1000');
+      setClasses(resClasses.data.classes || []);
+
       const resTeachers = await apiClient.get('/teachers?limit=1000');
       setTeachers(resTeachers.data.teachers || []);
 
@@ -638,9 +641,6 @@ const AdminDashboard = () => {
       if (resProfile?.data?.user) {
         setSchoolName(resProfile.data.user.schoolId?.name || '');
       }
-
-      const resClasses = await apiClient.get('/classes?limit=1000').catch(() => ({ data: { classes: [] } }));
-      setClasses(resClasses.data.classes || []);
 
       const resSubjects = await apiClient.get('/subjects').catch(() => ({ data: { subjects: [] } }));
       setSubjects(resSubjects.data.subjects || []);
@@ -672,6 +672,7 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      toast.error(error.response?.data?.message || 'Could not load dashboard data. Check the browser console for details.');
     } finally {
       setLoading(false);
     }
